@@ -1,0 +1,35 @@
+services:
+  nginx:
+    env_file:
+      - ./envs/production/.env.proxy
+    ports:
+      - target: 80
+        published: ${CATWLK_PROXY_HTTP_PORT:-80}
+        protocol: tcp
+        mode: ingress
+      - target: 443
+        published: ${CATWLK_PROXY_HTTPS_PORT:-443}
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - "${CATWLK_PROXY_CERTS_HOST_PATH:-/etc/certs}:/etc/certs:ro"
+    deploy:
+      replicas: ${MAKEPAD_PROXY_REPLICAS:-1}
+      placement:
+        constraints:
+          - node.labels.infra.makepad.role == proxy
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+
+networks:
+  app:
+    external: true
+    name: ${MAKEPAD_PROXY_APP_NETWORK}

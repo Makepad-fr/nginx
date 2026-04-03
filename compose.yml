@@ -1,0 +1,19 @@
+configs:
+  catwlk_conf:
+    file: ./sites/catwlk.conf.template
+
+services:
+  nginx:
+    image: nginx:1.28-alpine
+    environment:
+      CATWLK_PROXY_SERVER_NAME: ${CATWLK_PROXY_SERVER_NAME:-localhost}
+      CATWLK_PROXY_TLS_CERT_FILE: ${CATWLK_PROXY_TLS_CERT_FILE:-/etc/certs/localhost.pem}
+      CATWLK_PROXY_TLS_KEY_FILE: ${CATWLK_PROXY_TLS_KEY_FILE:-/etc/certs/localhost-key.pem}
+    configs:
+      - source: catwlk_conf
+        target: /etc/nginx/templates/catwlk.conf.template
+    networks:
+      - app
+
+networks:
+  app:

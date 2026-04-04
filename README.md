@@ -17,7 +17,7 @@ This repository owns the shared proxy stack for application VMs. Application rep
 
 The proxy joins a shared external overlay network:
 
-- `${DEPLOY_APP_NETWORK}`
+- `${DEPLOY_CATWLK_APP_NETWORK}`
 
 Application stacks attach to the same external network and expose a stable alias such as `catwlk-app`.
 
@@ -41,7 +41,7 @@ Required environment secrets:
 - `DEPLOY_SSH_PRIVATE_KEY`
 - `DEPLOY_REMOTE_DIR`
 - `DEPLOY_STACK_NAME`
-- `DEPLOY_APP_NETWORK`
+- `DEPLOY_CATWLK_APP_NETWORK`
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
 

@@ -33,7 +33,7 @@ jobs:
       - name: Prepare deployment bundle
         shell: bash
         env:
-          DEPLOY_APP_NETWORK: ${{ secrets.DEPLOY_APP_NETWORK }}
+          DEPLOY_CATWLK_APP_NETWORK: ${{ secrets.DEPLOY_CATWLK_APP_NETWORK }}
         run: |
           set -euo pipefail
           bundle_root="${RUNNER_TEMP}/bundle"
@@ -43,7 +43,7 @@ jobs:
           cp "envs/${{ inputs.environment }}/.env.proxy" "${bundle_root}/envs/${{ inputs.environment }}/.env.proxy"
           cp sites/catwlk.conf.template "${bundle_root}/sites/catwlk.conf.template"
           cat > "${bundle_root}/envs/${{ inputs.environment }}/.env.deploy" <<EOF
-          MAKEPAD_PROXY_APP_NETWORK=${DEPLOY_APP_NETWORK}
+          MAKEPAD_PROXY_APP_NETWORK=${DEPLOY_CATWLK_APP_NETWORK}
           EOF
 
       - name: Deploy via Docker Swarm

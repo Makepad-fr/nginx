@@ -10,7 +10,7 @@
 
 ## Placement
 
-- Proxy services are pinned with `node.labels.infra.makepad.role == proxy`.
+- Proxy services are pinned with `node.labels.infra.makepad.proxy == true`.
 
 ## Documentation
 

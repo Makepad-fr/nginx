@@ -26,7 +26,7 @@ Application stacks attach to the same external network and expose a stable alias
 Pin the shared proxy to proxy-capable nodes:
 
 ```bash
-docker node update --label-add infra.makepad.role=proxy <proxy-node>
+docker node update --label-add infra.makepad.proxy=true <proxy-node>
 ```
 
 ## Deployment

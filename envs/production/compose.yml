@@ -17,7 +17,7 @@ services:
       replicas: ${MAKEPAD_PROXY_REPLICAS:-1}
       placement:
         constraints:
-          - node.labels.infra.makepad.role == proxy
+          - node.labels.infra.makepad.proxy == true
       restart_policy:
         condition: on-failure
         delay: 5s

@@ -1,19 +1,40 @@
 configs:
-  catwlk_conf:
-    file: ./sites/catwlk.conf.template
+  common_conf:
+    file: ./sites/00-common.conf.template
+  catwlk_prod_conf:
+    file: ./sites/catwlk-prod.conf.template
+  catwlk_canary_conf:
+    file: ./sites/catwlk-canary.conf.template
+  alerteconso_prod_conf:
+    file: ./sites/alerteconso-prod.conf.template
 
 services:
   nginx:
     image: nginx:1.28-alpine
     environment:
-      CATWLK_PROXY_SERVER_NAME: ${CATWLK_PROXY_SERVER_NAME:-localhost}
-      CATWLK_PROXY_TLS_CERT_FILE: ${CATWLK_PROXY_TLS_CERT_FILE:-/etc/certs/localhost.pem}
-      CATWLK_PROXY_TLS_KEY_FILE: ${CATWLK_PROXY_TLS_KEY_FILE:-/etc/certs/localhost-key.pem}
+      CATWLK_PROD_SERVER_NAME: ${CATWLK_PROD_SERVER_NAME:-localhost}
+      CATWLK_CANARY_SERVER_NAME: ${CATWLK_CANARY_SERVER_NAME:-canary.localhost}
+      ALERTECONSO_PROD_SERVER_NAME: ${ALERTECONSO_PROD_SERVER_NAME:-alerteconso.localhost}
+      CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      ALERTECONSO_TLS_KEY_FILE: ${ALERTECONSO_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
-      - source: catwlk_conf
-        target: /etc/nginx/templates/catwlk.conf.template
+      - source: common_conf
+        target: /etc/nginx/templates/00-common.conf.template
+      - source: catwlk_prod_conf
+        target: /etc/nginx/templates/catwlk-prod.conf.template
+      - source: catwlk_canary_conf
+        target: /etc/nginx/templates/catwlk-canary.conf.template
+      - source: alerteconso_prod_conf
+        target: /etc/nginx/templates/alerteconso-prod.conf.template
     networks:
-      - app
+      - prod_app
+      - canary_app
+      - alerteconso_prod_app
 
 networks:
-  app:
+  prod_app:
+  canary_app:
+  alerteconso_prod_app:

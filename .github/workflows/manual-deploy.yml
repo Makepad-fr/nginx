@@ -2,19 +2,11 @@ name: Manual Deploy
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: Deployment target
-        required: true
-        type: choice
-        options:
-          - canary
-          - production
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: production
     permissions:
       contents: read
     steps:
@@ -33,18 +25,25 @@ jobs:
       - name: Prepare deployment bundle
         shell: bash
         env:
-          DEPLOY_CATWLK_APP_NETWORK: ${{ secrets.DEPLOY_CATWLK_APP_NETWORK }}
+          MAKEPAD_PROXY_PROD_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_PROD_APP_NETWORK }}
+          MAKEPAD_PROXY_CANARY_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_CANARY_APP_NETWORK }}
+          MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK }}
         run: |
           set -euo pipefail
           bundle_root="${RUNNER_TEMP}/bundle"
-          mkdir -p "${bundle_root}/envs/${{ inputs.environment }}" "${bundle_root}/sites"
+          mkdir -p "${bundle_root}/envs/production" "${bundle_root}/sites"
           cp compose.yml "${bundle_root}/compose.yml"
-          cp "envs/${{ inputs.environment }}/compose.yml" "${bundle_root}/envs/${{ inputs.environment }}/compose.yml"
-          cp "envs/${{ inputs.environment }}/.env.proxy" "${bundle_root}/envs/${{ inputs.environment }}/.env.proxy"
-          cp sites/catwlk.conf.template "${bundle_root}/sites/catwlk.conf.template"
-          cat > "${bundle_root}/envs/${{ inputs.environment }}/.env.deploy" <<EOF
-          MAKEPAD_PROXY_APP_NETWORK=${DEPLOY_CATWLK_APP_NETWORK}
-          EOF
+          cp "envs/production/compose.yml" "${bundle_root}/envs/production/compose.yml"
+          cp "envs/production/.env.proxy" "${bundle_root}/envs/production/.env.proxy"
+          cp sites/00-common.conf.template "${bundle_root}/sites/00-common.conf.template"
+          cp sites/catwlk-prod.conf.template "${bundle_root}/sites/catwlk-prod.conf.template"
+          cp sites/catwlk-canary.conf.template "${bundle_root}/sites/catwlk-canary.conf.template"
+          cp sites/alerteconso-prod.conf.template "${bundle_root}/sites/alerteconso-prod.conf.template"
+          {
+            echo "MAKEPAD_PROXY_PROD_APP_NETWORK=${MAKEPAD_PROXY_PROD_APP_NETWORK}"
+            echo "MAKEPAD_PROXY_CANARY_APP_NETWORK=${MAKEPAD_PROXY_CANARY_APP_NETWORK}"
+            echo "MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK=${MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK}"
+          } > "${bundle_root}/envs/production/.env.deploy"
 
       - name: Deploy via Docker Swarm
         shell: bash
@@ -63,30 +62,49 @@ jobs:
           scp_opts=(-o StrictHostKeyChecking=accept-new -P "${remote_port}")
           remote_target="${REMOTE_USER}@${REMOTE_HOST}"
 
-          ssh "${ssh_opts[@]}" "${remote_target}" mkdir -p "${REMOTE_DIR}/envs/${{ inputs.environment }}" "${REMOTE_DIR}/sites"
+          ssh "${ssh_opts[@]}" "${remote_target}" mkdir -p "${REMOTE_DIR}/envs/production" "${REMOTE_DIR}/sites"
           scp "${scp_opts[@]}" "${bundle_root}/compose.yml" "${remote_target}:${REMOTE_DIR}/compose.yml"
-          scp "${scp_opts[@]}" "${bundle_root}/envs/${{ inputs.environment }}/compose.yml" "${remote_target}:${REMOTE_DIR}/envs/${{ inputs.environment }}/compose.yml"
-          scp "${scp_opts[@]}" "${bundle_root}/envs/${{ inputs.environment }}/.env.proxy" "${remote_target}:${REMOTE_DIR}/envs/${{ inputs.environment }}/.env.proxy"
-          scp "${scp_opts[@]}" "${bundle_root}/envs/${{ inputs.environment }}/.env.deploy" "${remote_target}:${REMOTE_DIR}/envs/${{ inputs.environment }}/.env.deploy"
-          scp "${scp_opts[@]}" "${bundle_root}/sites/catwlk.conf.template" "${remote_target}:${REMOTE_DIR}/sites/catwlk.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/envs/production/compose.yml" "${remote_target}:${REMOTE_DIR}/envs/production/compose.yml"
+          scp "${scp_opts[@]}" "${bundle_root}/envs/production/.env.proxy" "${remote_target}:${REMOTE_DIR}/envs/production/.env.proxy"
+          scp "${scp_opts[@]}" "${bundle_root}/envs/production/.env.deploy" "${remote_target}:${REMOTE_DIR}/envs/production/.env.deploy"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/00-common.conf.template" "${remote_target}:${REMOTE_DIR}/sites/00-common.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/catwlk-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/catwlk-prod.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/catwlk-canary.conf.template" "${remote_target}:${REMOTE_DIR}/sites/catwlk-canary.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/alerteconso-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/alerteconso-prod.conf.template"
 
-          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" "${{ inputs.environment }}" <<'EOF'
+          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" <<'EOF'
           set -euo pipefail
           remote_dir=$1
           stack_name=$2
-          deploy_env=$3
+          deploy_env=production
           env_deploy="${remote_dir}/envs/${deploy_env}/.env.deploy"
-          app_network=$(grep '^MAKEPAD_PROXY_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)
+          for app_network in \
+            "$(grep '^MAKEPAD_PROXY_PROD_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
+            "$(grep '^MAKEPAD_PROXY_CANARY_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
+            "$(grep '^MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)"; do
+            docker network inspect "${app_network}" >/dev/null 2>&1 \
+              || docker network create --driver overlay --attachable "${app_network}"
+          done
 
-          docker network inspect "${app_network}" >/dev/null 2>&1 \
-            || docker network create --driver overlay --attachable "${app_network}"
-
-          MAKEPAD_PROXY_APP_NETWORK="${app_network}" docker compose \
+          docker compose \
             --env-file "${remote_dir}/envs/${deploy_env}/.env.proxy" \
             --env-file "${env_deploy}" \
             -f "${remote_dir}/compose.yml" \
             -f "${remote_dir}/envs/${deploy_env}/compose.yml" \
-            config > "${remote_dir}/stack.yml"
+            config > "${remote_dir}/stack.rendered.yml"
+
+          python3 - "${remote_dir}/stack.rendered.yml" "${remote_dir}/stack.yml" <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path(sys.argv[1])
+          target = Path(sys.argv[2])
+          text = source.read_text()
+          text = text.replace('published: "80"', 'published: 80')
+          text = text.replace('published: "443"', 'published: 443')
+          text = "\n".join(line for line in text.splitlines() if line != "name: nginx") + "\n"
+          target.write_text(text)
+          PY
 
           docker stack deploy --compose-file "${remote_dir}/stack.yml" "${stack_name}"
           EOF

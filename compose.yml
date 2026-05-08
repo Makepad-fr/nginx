@@ -7,6 +7,8 @@ configs:
     file: ./sites/catwlk-canary.conf.template
   alerteconso_prod_conf:
     file: ./sites/alerteconso-prod.conf.template
+  le_petit_coin_prod_conf:
+    file: ./sites/le-petit-coin-prod.conf.template
 
 services:
   nginx:
@@ -15,10 +17,13 @@ services:
       CATWLK_PROD_SERVER_NAME: ${CATWLK_PROD_SERVER_NAME:-localhost}
       CATWLK_CANARY_SERVER_NAME: ${CATWLK_CANARY_SERVER_NAME:-canary.localhost}
       ALERTECONSO_PROD_SERVER_NAME: ${ALERTECONSO_PROD_SERVER_NAME:-alerteconso.localhost}
+      LE_PETIT_COIN_PROD_SERVER_NAME: ${LE_PETIT_COIN_PROD_SERVER_NAME:-aupetitcoin.localhost}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       ALERTECONSO_TLS_KEY_FILE: ${ALERTECONSO_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      LE_PETIT_COIN_TLS_CERT_FILE: ${LE_PETIT_COIN_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      LE_PETIT_COIN_TLS_KEY_FILE: ${LE_PETIT_COIN_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
       - source: common_conf
@@ -29,12 +34,16 @@ services:
         target: /etc/nginx/templates/catwlk-canary.conf.template
       - source: alerteconso_prod_conf
         target: /etc/nginx/templates/alerteconso-prod.conf.template
+      - source: le_petit_coin_prod_conf
+        target: /etc/nginx/templates/le-petit-coin-prod.conf.template
     networks:
       - prod_app
       - canary_app
       - alerteconso_prod_app
+      - le_petit_coin_prod_app
 
 networks:
   prod_app:
   canary_app:
   alerteconso_prod_app:
+  le_petit_coin_prod_app:

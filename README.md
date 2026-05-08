@@ -7,9 +7,9 @@ This repository owns the shared proxy stack for application VMs. Application rep
 ## Layout
 
 - `compose.yml`: base Nginx service definition
-- `sites/catwlk.conf.template`: Catwlk virtual host template
-- `envs/canary/compose.yml`: canary Swarm overrides
-- `envs/canary/.env.proxy`: canary proxy settings
+- `sites/catwlk-*.conf.template`: Catwlk virtual host templates
+- `sites/alerteconso-prod.conf.template`: Alerte Conso virtual host template
+- `sites/le-petit-coin-prod.conf.template`: au petit coin backend virtual host template
 - `envs/production/compose.yml`: production Swarm overrides
 - `envs/production/.env.proxy`: production proxy settings
 
@@ -17,7 +17,10 @@ This repository owns the shared proxy stack for application VMs. Application rep
 
 The proxy joins a shared external overlay network:
 
-- `${DEPLOY_CATWLK_APP_NETWORK}`
+- `${MAKEPAD_PROXY_PROD_APP_NETWORK}`
+- `${MAKEPAD_PROXY_CANARY_APP_NETWORK}`
+- `${MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK}`
+- `${MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK}`
 
 Application stacks attach to the same external network and expose a stable alias such as `catwlk-app`.
 
@@ -41,10 +44,18 @@ Required environment secrets:
 - `DEPLOY_SSH_PRIVATE_KEY`
 - `DEPLOY_REMOTE_DIR`
 - `DEPLOY_STACK_NAME`
-- `DEPLOY_CATWLK_APP_NETWORK`
+- `MAKEPAD_PROXY_PROD_APP_NETWORK`
+- `MAKEPAD_PROXY_CANARY_APP_NETWORK`
+- `MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK`
+- `MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK`
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
 
 ## TLS
 
-Certificates must already exist on the proxy VM under `/etc/certs`, matching the paths configured in `envs/<environment>/.env.proxy`.
+Certificates must already exist on the proxy VM under `/etc/letsencrypt`, matching the paths configured in `envs/<environment>/.env.proxy`.
+
+For `aupetitcoin.makepad.fr`, the production proxy expects:
+
+- `/etc/letsencrypt/live/aupetitcoin.makepad.fr/fullchain.pem`
+- `/etc/letsencrypt/live/aupetitcoin.makepad.fr/privkey.pem`

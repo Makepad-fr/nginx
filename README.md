@@ -15,14 +15,14 @@ This repository owns the shared proxy stack for application VMs. Application rep
 
 ## Networks
 
-The proxy joins a shared external overlay network:
+The proxy joins shared external overlay networks:
 
 - `${MAKEPAD_PROXY_PROD_APP_NETWORK}`
 - `${MAKEPAD_PROXY_CANARY_APP_NETWORK}`
 - `${MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK}`
 - `${MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK}`
 
-Application stacks attach to the same external network and expose a stable alias such as `catwlk-app`.
+Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`.
 
 ## Node Labels
 

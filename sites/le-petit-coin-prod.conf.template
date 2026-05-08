@@ -31,7 +31,7 @@ server {
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     location / {
-        set $le_petit_coin_prod_upstream http://le-petit-coin-backend:8080;
+        set $le_petit_coin_prod_upstream ${LE_PETIT_COIN_PROD_UPSTREAM};
         proxy_pass $le_petit_coin_prod_upstream;
         proxy_http_version 1.1;
         proxy_set_header Connection $connection_upgrade;

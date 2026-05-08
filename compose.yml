@@ -18,6 +18,7 @@ services:
       CATWLK_CANARY_SERVER_NAME: ${CATWLK_CANARY_SERVER_NAME:-canary.localhost}
       ALERTECONSO_PROD_SERVER_NAME: ${ALERTECONSO_PROD_SERVER_NAME:-alerteconso.localhost}
       LE_PETIT_COIN_PROD_SERVER_NAME: ${LE_PETIT_COIN_PROD_SERVER_NAME:-aupetitcoin.localhost}
+      LE_PETIT_COIN_PROD_UPSTREAM: ${LE_PETIT_COIN_PROD_UPSTREAM:-http://le-petit-coin-backend:8080}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}

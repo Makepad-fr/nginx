@@ -11,6 +11,10 @@ on:
       - ".github/workflows/manual-deploy.yml"
   workflow_dispatch:
 
+concurrency:
+  group: nginx-production-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

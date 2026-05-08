@@ -1,6 +1,14 @@
-name: Manual Deploy
+name: Deploy Nginx
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "compose.yml"
+      - "envs/production/**"
+      - "sites/**"
+      - ".github/workflows/manual-deploy.yml"
   workflow_dispatch:
 
 jobs:

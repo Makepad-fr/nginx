@@ -34,7 +34,7 @@ docker node update --label-add infra.makepad.proxy=true <proxy-node>
 
 ## Deployment
 
-Use the manual GitHub Actions workflow in this repository.
+The deploy workflow runs automatically on pushes to `main` that change the proxy Compose files, production environment, site templates, or the deploy workflow itself. It can also be run manually from GitHub Actions.
 
 Required environment secrets:
 

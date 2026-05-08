@@ -31,6 +31,17 @@ jobs:
           MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK }}
         run: |
           set -euo pipefail
+          for required_network in \
+            MAKEPAD_PROXY_PROD_APP_NETWORK \
+            MAKEPAD_PROXY_CANARY_APP_NETWORK \
+            MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK \
+            MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK; do
+            if [[ -z "${!required_network}" ]]; then
+              echo "::error::Missing required production secret: ${required_network}" >&2
+              exit 1
+            fi
+          done
+
           bundle_root="${RUNNER_TEMP}/bundle"
           mkdir -p "${bundle_root}/envs/production" "${bundle_root}/sites"
           cp compose.yml "${bundle_root}/compose.yml"

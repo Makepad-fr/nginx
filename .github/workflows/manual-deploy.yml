@@ -28,8 +28,20 @@ jobs:
           MAKEPAD_PROXY_PROD_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_PROD_APP_NETWORK }}
           MAKEPAD_PROXY_CANARY_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_CANARY_APP_NETWORK }}
           MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK }}
+          MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK }}
         run: |
           set -euo pipefail
+          for required_network in \
+            MAKEPAD_PROXY_PROD_APP_NETWORK \
+            MAKEPAD_PROXY_CANARY_APP_NETWORK \
+            MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK \
+            MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK; do
+            if [[ -z "${!required_network}" ]]; then
+              echo "::error::Missing required production secret: ${required_network}" >&2
+              exit 1
+            fi
+          done
+
           bundle_root="${RUNNER_TEMP}/bundle"
           mkdir -p "${bundle_root}/envs/production" "${bundle_root}/sites"
           cp compose.yml "${bundle_root}/compose.yml"
@@ -39,10 +51,12 @@ jobs:
           cp sites/catwlk-prod.conf.template "${bundle_root}/sites/catwlk-prod.conf.template"
           cp sites/catwlk-canary.conf.template "${bundle_root}/sites/catwlk-canary.conf.template"
           cp sites/alerteconso-prod.conf.template "${bundle_root}/sites/alerteconso-prod.conf.template"
+          cp sites/le-petit-coin-prod.conf.template "${bundle_root}/sites/le-petit-coin-prod.conf.template"
           {
             echo "MAKEPAD_PROXY_PROD_APP_NETWORK=${MAKEPAD_PROXY_PROD_APP_NETWORK}"
             echo "MAKEPAD_PROXY_CANARY_APP_NETWORK=${MAKEPAD_PROXY_CANARY_APP_NETWORK}"
             echo "MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK=${MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK}"
+            echo "MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK=${MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK}"
           } > "${bundle_root}/envs/production/.env.deploy"
 
       - name: Deploy via Docker Swarm
@@ -71,6 +85,7 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/catwlk-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/catwlk-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/catwlk-canary.conf.template" "${remote_target}:${REMOTE_DIR}/sites/catwlk-canary.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/alerteconso-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/alerteconso-prod.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/le-petit-coin-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/le-petit-coin-prod.conf.template"
 
           ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" <<'EOF'
           set -euo pipefail
@@ -81,7 +96,8 @@ jobs:
           for app_network in \
             "$(grep '^MAKEPAD_PROXY_PROD_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
             "$(grep '^MAKEPAD_PROXY_CANARY_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
-            "$(grep '^MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)"; do
+            "$(grep '^MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
+            "$(grep '^MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)"; do
             docker network inspect "${app_network}" >/dev/null 2>&1 \
               || docker network create --driver overlay --attachable "${app_network}"
           done

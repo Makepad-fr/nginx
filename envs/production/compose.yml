@@ -40,3 +40,6 @@ networks:
   alerteconso_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK}
+  le_petit_coin_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK}

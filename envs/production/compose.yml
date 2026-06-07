@@ -43,3 +43,6 @@ networks:
   le_petit_coin_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK}
+  vif_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VIF_APP_NETWORK}

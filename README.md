@@ -10,6 +10,8 @@ This repository owns the shared proxy stack for application VMs. Application rep
 - `sites/catwlk-*.conf.template`: Catwlk virtual host templates
 - `sites/alerteconso-prod.conf.template`: Alerte Conso virtual host template
 - `sites/le-petit-coin-prod.conf.template`: au petit coin backend virtual host template
+- `sites/vif-prod.conf.template`: Vif virtual host template
+- `sites/makepad-landing-prod.conf.template`: Makepad landing site virtual host template
 - `envs/production/compose.yml`: production Swarm overrides
 - `envs/production/.env.proxy`: production proxy settings
 
@@ -21,8 +23,10 @@ The proxy joins shared external overlay networks:
 - `${MAKEPAD_PROXY_CANARY_APP_NETWORK}`
 - `${MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK}`
 - `${MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK}`
+- `${MAKEPAD_PROXY_VIF_APP_NETWORK}`
+- `${MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK}`
 
-Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`.
+Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`. `makepad.fr` proxies to `MAKEPAD_LANDING_PROD_UPSTREAM`, which defaults to `http://makepad-landing-prod-app:8080`; `www.makepad.fr` redirects permanently to `makepad.fr`.
 
 ## Node Labels
 
@@ -48,6 +52,8 @@ Required environment secrets:
 - `MAKEPAD_PROXY_CANARY_APP_NETWORK`
 - `MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK`
 - `MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK`
+- `MAKEPAD_PROXY_VIF_APP_NETWORK`
+- `MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK`
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
 
@@ -59,3 +65,8 @@ For `aupetitcoin.makepad.fr`, the production proxy expects:
 
 - `/etc/letsencrypt/live/aupetitcoin.makepad.fr/fullchain.pem`
 - `/etc/letsencrypt/live/aupetitcoin.makepad.fr/privkey.pem`
+
+For `makepad.fr` and `www.makepad.fr`, the production proxy expects a certificate that covers both names:
+
+- `/etc/letsencrypt/live/makepad.fr/fullchain.pem`
+- `/etc/letsencrypt/live/makepad.fr/privkey.pem`

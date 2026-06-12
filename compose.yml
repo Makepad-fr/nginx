@@ -11,6 +11,8 @@ configs:
     file: ./sites/le-petit-coin-prod.conf.template
   vif_prod_conf:
     file: ./sites/vif-prod.conf.template
+  makepad_landing_prod_conf:
+    file: ./sites/makepad-landing-prod.conf.template
 
 services:
   nginx:
@@ -23,6 +25,9 @@ services:
       LE_PETIT_COIN_PROD_UPSTREAM: ${LE_PETIT_COIN_PROD_UPSTREAM:-http://le-petit-coin-backend:8080}
       VIF_PROD_SERVER_NAME: ${VIF_PROD_SERVER_NAME:-vif.localhost}
       VIF_PROD_UPSTREAM: ${VIF_PROD_UPSTREAM:-http://vif-apisix:9080}
+      MAKEPAD_LANDING_PROD_SERVER_NAME: ${MAKEPAD_LANDING_PROD_SERVER_NAME:-makepad.localhost}
+      MAKEPAD_LANDING_WWW_SERVER_NAME: ${MAKEPAD_LANDING_WWW_SERVER_NAME:-www.makepad.localhost}
+      MAKEPAD_LANDING_PROD_UPSTREAM: ${MAKEPAD_LANDING_PROD_UPSTREAM:-http://makepad-landing-prod-app:8080}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
@@ -31,6 +36,8 @@ services:
       LE_PETIT_COIN_TLS_KEY_FILE: ${LE_PETIT_COIN_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       VIF_TLS_CERT_FILE: ${VIF_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       VIF_TLS_KEY_FILE: ${VIF_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      MAKEPAD_LANDING_TLS_CERT_FILE: ${MAKEPAD_LANDING_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      MAKEPAD_LANDING_TLS_KEY_FILE: ${MAKEPAD_LANDING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
       - source: common_conf
@@ -45,12 +52,15 @@ services:
         target: /etc/nginx/templates/le-petit-coin-prod.conf.template
       - source: vif_prod_conf
         target: /etc/nginx/templates/vif-prod.conf.template
+      - source: makepad_landing_prod_conf
+        target: /etc/nginx/templates/makepad-landing-prod.conf.template
     networks:
       - prod_app
       - canary_app
       - alerteconso_prod_app
       - le_petit_coin_prod_app
       - vif_prod_app
+      - makepad_landing_prod_app
 
 networks:
   prod_app:
@@ -58,3 +68,4 @@ networks:
   alerteconso_prod_app:
   le_petit_coin_prod_app:
   vif_prod_app:
+  makepad_landing_prod_app:

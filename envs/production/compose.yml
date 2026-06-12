@@ -46,3 +46,6 @@ networks:
   vif_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_VIF_APP_NETWORK}
+  makepad_landing_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK}

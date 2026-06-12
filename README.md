@@ -10,6 +10,7 @@ This repository owns the shared proxy stack for application VMs. Application rep
 - `sites/catwlk-*.conf.template`: Catwlk virtual host templates
 - `sites/alerteconso-prod.conf.template`: Alerte Conso virtual host template
 - `sites/le-petit-coin-prod.conf.template`: au petit coin backend virtual host template
+- `sites/vif-prod.conf.template`: Vif virtual host template
 - `sites/makepad-landing-prod.conf.template`: Makepad landing site virtual host template
 - `envs/production/compose.yml`: production Swarm overrides
 - `envs/production/.env.proxy`: production proxy settings

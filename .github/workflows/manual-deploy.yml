@@ -113,10 +113,12 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/vif-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/vif-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/makepad-landing-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/makepad-landing-prod.conf.template"
 
-          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" <<'EOF'
+          deploy_revision="${GITHUB_SHA::12}"
+          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" "${deploy_revision}" <<'EOF'
           set -euo pipefail
           remote_dir=$1
           stack_name=$2
+          deploy_revision=$3
           deploy_env=production
           env_deploy="${remote_dir}/envs/${deploy_env}/.env.deploy"
           for app_network in \
@@ -137,16 +139,24 @@ jobs:
             -f "${remote_dir}/envs/${deploy_env}/compose.yml" \
             config > "${remote_dir}/stack.rendered.yml"
 
-          python3 - "${remote_dir}/stack.rendered.yml" "${remote_dir}/stack.yml" <<'PY'
+          python3 - "${remote_dir}/stack.rendered.yml" "${remote_dir}/stack.yml" "${deploy_revision}" <<'PY'
           from pathlib import Path
           import sys
 
           source = Path(sys.argv[1])
           target = Path(sys.argv[2])
+          revision = sys.argv[3]
           text = source.read_text()
           text = text.replace('published: "80"', 'published: 80')
           text = text.replace('published: "443"', 'published: 443')
-          text = "\n".join(line for line in text.splitlines() if line != "name: nginx") + "\n"
+          lines = []
+          for line in text.splitlines():
+              if line == "name: nginx":
+                  continue
+              if line.startswith("    name: nginx_") and line.endswith("_conf"):
+                  line = f"{line}_rev{revision}"
+              lines.append(line)
+          text = "\n".join(lines) + "\n"
           target.write_text(text)
           PY
 

@@ -13,6 +13,8 @@ configs:
     file: ./sites/vif-prod.conf.template
   makepad_landing_prod_conf:
     file: ./sites/makepad-landing-prod.conf.template
+  runtrace_prod_conf:
+    file: ./sites/runtrace-prod.conf.template
 
 services:
   nginx:
@@ -28,6 +30,8 @@ services:
       MAKEPAD_LANDING_PROD_SERVER_NAME: ${MAKEPAD_LANDING_PROD_SERVER_NAME:-makepad.localhost}
       MAKEPAD_LANDING_WWW_SERVER_NAME: ${MAKEPAD_LANDING_WWW_SERVER_NAME:-www.makepad.localhost}
       MAKEPAD_LANDING_PROD_UPSTREAM: ${MAKEPAD_LANDING_PROD_UPSTREAM:-http://makepad-landing-prod-app:8080}
+      RUNTRACE_PROD_SERVER_NAME: ${RUNTRACE_PROD_SERVER_NAME:-runtrace.localhost}
+      RUNTRACE_PROD_UPSTREAM: ${RUNTRACE_PROD_UPSTREAM:-http://runtrace-prod-app:8080}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
@@ -38,6 +42,8 @@ services:
       VIF_TLS_KEY_FILE: ${VIF_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       MAKEPAD_LANDING_TLS_CERT_FILE: ${MAKEPAD_LANDING_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       MAKEPAD_LANDING_TLS_KEY_FILE: ${MAKEPAD_LANDING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      RUNTRACE_TLS_CERT_FILE: ${RUNTRACE_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      RUNTRACE_TLS_KEY_FILE: ${RUNTRACE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
       - source: common_conf
@@ -54,6 +60,8 @@ services:
         target: /etc/nginx/templates/vif-prod.conf.template
       - source: makepad_landing_prod_conf
         target: /etc/nginx/templates/makepad-landing-prod.conf.template
+      - source: runtrace_prod_conf
+        target: /etc/nginx/templates/runtrace-prod.conf.template
     networks:
       - prod_app
       - canary_app
@@ -61,6 +69,7 @@ services:
       - le_petit_coin_prod_app
       - vif_prod_app
       - makepad_landing_prod_app
+      - runtrace_prod_app
 
 networks:
   prod_app:
@@ -69,3 +78,4 @@ networks:
   le_petit_coin_prod_app:
   vif_prod_app:
   makepad_landing_prod_app:
+  runtrace_prod_app:

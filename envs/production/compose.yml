@@ -49,3 +49,6 @@ networks:
   makepad_landing_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK}
+  runtrace_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}

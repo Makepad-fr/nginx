@@ -43,7 +43,6 @@ jobs:
           MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK }}
           MAKEPAD_PROXY_VIF_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_VIF_APP_NETWORK }}
           MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK }}
-          MAKEPAD_PROXY_RUNTRACE_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_RUNTRACE_APP_NETWORK }}
           MAKEPAD_PROXY_EVIDELLA_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_EVIDELLA_APP_NETWORK }}
         run: |
           set -euo pipefail
@@ -54,7 +53,6 @@ jobs:
             MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK \
             MAKEPAD_PROXY_VIF_APP_NETWORK \
             MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK \
-            MAKEPAD_PROXY_RUNTRACE_APP_NETWORK \
             MAKEPAD_PROXY_EVIDELLA_APP_NETWORK; do
             if [[ -z "${!required_network}" ]]; then
               echo "::error::Missing required production secret: ${required_network}" >&2
@@ -74,7 +72,6 @@ jobs:
           cp sites/le-petit-coin-prod.conf.template "${bundle_root}/sites/le-petit-coin-prod.conf.template"
           cp sites/vif-prod.conf.template "${bundle_root}/sites/vif-prod.conf.template"
           cp sites/makepad-landing-prod.conf.template "${bundle_root}/sites/makepad-landing-prod.conf.template"
-          cp sites/runtrace-prod.conf.template "${bundle_root}/sites/runtrace-prod.conf.template"
           cp sites/evidella-prod.conf.template "${bundle_root}/sites/evidella-prod.conf.template"
           {
             echo "MAKEPAD_PROXY_PROD_APP_NETWORK=${MAKEPAD_PROXY_PROD_APP_NETWORK}"
@@ -83,7 +80,6 @@ jobs:
             echo "MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK=${MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK}"
             echo "MAKEPAD_PROXY_VIF_APP_NETWORK=${MAKEPAD_PROXY_VIF_APP_NETWORK}"
             echo "MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK=${MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK}"
-            echo "MAKEPAD_PROXY_RUNTRACE_APP_NETWORK=${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}"
             echo "MAKEPAD_PROXY_EVIDELLA_APP_NETWORK=${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}"
           } > "${bundle_root}/envs/production/.env.deploy"
 
@@ -120,7 +116,6 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/le-petit-coin-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/le-petit-coin-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/vif-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/vif-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/makepad-landing-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/makepad-landing-prod.conf.template"
-          scp "${scp_opts[@]}" "${bundle_root}/sites/runtrace-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/runtrace-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/evidella-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/evidella-prod.conf.template"
 
           ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" <<'EOF'
@@ -136,7 +131,6 @@ jobs:
             "$(grep '^MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
             "$(grep '^MAKEPAD_PROXY_VIF_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
             "$(grep '^MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
-            "$(grep '^MAKEPAD_PROXY_RUNTRACE_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
             "$(grep '^MAKEPAD_PROXY_EVIDELLA_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)"; do
             docker network inspect "${app_network}" >/dev/null 2>&1 \
               || docker network create --driver overlay --attachable "${app_network}"

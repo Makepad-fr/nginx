@@ -12,7 +12,7 @@ This repository owns the shared proxy stack for application VMs. Application rep
 - `sites/le-petit-coin-prod.conf.template`: au petit coin backend virtual host template
 - `sites/vif-prod.conf.template`: Vif virtual host template
 - `sites/makepad-landing-prod.conf.template`: Makepad landing site virtual host template
-- `sites/runtrace-prod.conf.template`: Runtrace admin and agent backend virtual host template
+- `sites/runtrace-prod.conf.template`: inactive Runtrace virtual host template, kept until DNS and TLS are ready
 - `sites/evidella-prod.conf.template`: Evidella landing site virtual host template
 - `envs/production/compose.yml`: production Swarm overrides
 - `envs/production/.env.proxy`: production proxy settings
@@ -27,10 +27,9 @@ The proxy joins shared external overlay networks:
 - `${MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK}`
 - `${MAKEPAD_PROXY_VIF_APP_NETWORK}`
 - `${MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK}`
-- `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`
 - `${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}`
 
-Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`. `makepad.fr` proxies to `MAKEPAD_LANDING_PROD_UPSTREAM`, which defaults to `http://makepad-landing-prod-app:8080`; `www.makepad.fr` redirects permanently to `makepad.fr`. `runtrace.co` proxies to `RUNTRACE_PROD_UPSTREAM`, which defaults to `http://runtrace-prod-app:8080`. `evidella.com` proxies to `EVIDELLA_PROD_UPSTREAM`, which defaults to `http://opsbrainlanding-prod-app:8080`; `www.evidella.com` redirects permanently to `evidella.com`.
+Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`. `makepad.fr` proxies to `MAKEPAD_LANDING_PROD_UPSTREAM`, which defaults to `http://makepad-landing-prod-app:8080`; `www.makepad.fr` redirects permanently to `makepad.fr`. `evidella.com` proxies to `EVIDELLA_PROD_UPSTREAM`, which defaults to `http://opsbrainlanding-prod-app:8080`; `www.evidella.com` redirects permanently to `evidella.com`.
 
 ## Node Labels
 
@@ -58,7 +57,6 @@ Required environment secrets:
 - `MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK`
 - `MAKEPAD_PROXY_VIF_APP_NETWORK`
 - `MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK`
-- `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK`
 - `MAKEPAD_PROXY_EVIDELLA_APP_NETWORK`
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
@@ -76,11 +74,6 @@ For `makepad.fr` and `www.makepad.fr`, the production proxy expects a certificat
 
 - `/etc/letsencrypt/live/makepad.fr/fullchain.pem`
 - `/etc/letsencrypt/live/makepad.fr/privkey.pem`
-
-For `runtrace.co`, the production proxy expects:
-
-- `/etc/letsencrypt/live/runtrace.co/fullchain.pem`
-- `/etc/letsencrypt/live/runtrace.co/privkey.pem`
 
 For `evidella.com` and `www.evidella.com`, the production proxy expects a certificate that covers both names:
 

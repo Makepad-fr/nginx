@@ -1,0 +1,108 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${OPENPANEL_PROD_SERVER_NAME};
+
+    location /.well-known/acme-challenge/ {
+        root ${CATWLK_ACME_WEBROOT};
+        default_type text/plain;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${OPENPANEL_PROD_SERVER_NAME};
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    ssl_certificate ${OPENPANEL_TLS_CERT_FILE};
+    ssl_certificate_key ${OPENPANEL_TLS_KEY_FILE};
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location = /api {
+        return 308 /api/;
+    }
+
+    location /api/ {
+        rewrite ^/api/(.*)$ /$1 break;
+        set $openpanel_api_upstream ${OPENPANEL_API_UPSTREAM};
+        proxy_pass $openpanel_api_upstream;
+        proxy_http_version 1.1;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /oauth2/ {
+        set $openpanel_oauth2_proxy_upstream ${OPENPANEL_OAUTH2_PROXY_UPSTREAM};
+        proxy_pass $openpanel_oauth2_proxy_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-Request-Redirect $scheme://$host$request_uri;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location = /oauth2/auth {
+        internal;
+        set $openpanel_oauth2_proxy_upstream ${OPENPANEL_OAUTH2_PROXY_UPSTREAM};
+        proxy_pass $openpanel_oauth2_proxy_upstream;
+        proxy_http_version 1.1;
+        proxy_pass_request_body off;
+        proxy_set_header Connection "";
+        proxy_set_header Content-Length "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Original-URI $request_uri;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location / {
+        auth_request /oauth2/auth;
+        error_page 401 = @openpanel_oauth2_signin;
+        auth_request_set $openpanel_auth_user $upstream_http_x_auth_request_user;
+        auth_request_set $openpanel_auth_email $upstream_http_x_auth_request_email;
+        auth_request_set $openpanel_auth_groups $upstream_http_x_auth_request_groups;
+
+        set $openpanel_dashboard_upstream ${OPENPANEL_DASHBOARD_UPSTREAM};
+        proxy_pass $openpanel_dashboard_upstream;
+        proxy_http_version 1.1;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header X-Auth-Request-Email $openpanel_auth_email;
+        proxy_set_header X-Auth-Request-Groups $openpanel_auth_groups;
+        proxy_set_header X-Auth-Request-User $openpanel_auth_user;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location @openpanel_oauth2_signin {
+        return 302 /oauth2/start?rd=$scheme://$host$request_uri;
+    }
+}

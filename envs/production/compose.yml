@@ -30,6 +30,23 @@ services:
         parallelism: 1
         order: stop-first
 
+  fashion-crawler-admin-oauth2-proxy:
+    deploy:
+      replicas: ${FASHION_CRAWLER_ADMIN_OAUTH2_PROXY_REPLICAS:-1}
+      placement:
+        constraints:
+          - node.labels.infra.makepad.proxy == true
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: stop-first
+
 networks:
   prod_app:
     external: true
@@ -52,3 +69,6 @@ networks:
   evidella_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}
+  fashion_crawler_admin_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK}

@@ -1,0 +1,83 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${FASHION_CRAWLER_ADMIN_PROD_SERVER_NAME};
+
+    location /.well-known/acme-challenge/ {
+        root ${CATWLK_ACME_WEBROOT};
+        default_type text/plain;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${FASHION_CRAWLER_ADMIN_PROD_SERVER_NAME};
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    ssl_certificate ${FASHION_CRAWLER_ADMIN_TLS_CERT_FILE};
+    ssl_certificate_key ${FASHION_CRAWLER_ADMIN_TLS_KEY_FILE};
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location /oauth2/ {
+        set $fashion_crawler_admin_auth_upstream http://fashion-crawler-admin-oauth2-proxy:4180;
+        proxy_pass $fashion_crawler_admin_auth_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Auth-Request-Redirect $scheme://$host$request_uri;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location = /oauth2/auth {
+        set $fashion_crawler_admin_auth_upstream http://fashion-crawler-admin-oauth2-proxy:4180;
+        proxy_pass $fashion_crawler_admin_auth_upstream;
+        proxy_http_version 1.1;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Original-URI $request_uri;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Scheme https;
+    }
+
+    location @fashion_crawler_admin_sign_in {
+        return 302 /oauth2/start?rd=$scheme://$host$request_uri;
+    }
+
+    location / {
+        set $fashion_crawler_admin_prod_upstream ${FASHION_CRAWLER_ADMIN_PROD_UPSTREAM};
+
+        auth_request /oauth2/auth;
+        error_page 401 = @fashion_crawler_admin_sign_in;
+        auth_request_set $auth_user $upstream_http_x_auth_request_user;
+        auth_request_set $auth_email $upstream_http_x_auth_request_email;
+
+        proxy_pass $fashion_crawler_admin_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header X-Auth-Request-Email $auth_email;
+        proxy_set_header X-Auth-Request-User $auth_user;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}

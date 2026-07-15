@@ -1,7 +1,7 @@
 server {
     listen 80;
     listen [::]:80;
-    server_name ${FASHION_CRAWLER_ADMIN_PROD_SERVER_NAME};
+    server_name ${SCRAPING_ADMIN_PROD_SERVER_NAME};
 
     location /.well-known/acme-challenge/ {
         root ${CATWLK_ACME_WEBROOT};
@@ -17,11 +17,11 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     http2 on;
-    server_name ${FASHION_CRAWLER_ADMIN_PROD_SERVER_NAME};
+    server_name ${SCRAPING_ADMIN_PROD_SERVER_NAME};
     resolver 127.0.0.11 valid=10s ipv6=off;
 
-    ssl_certificate ${FASHION_CRAWLER_ADMIN_TLS_CERT_FILE};
-    ssl_certificate_key ${FASHION_CRAWLER_ADMIN_TLS_KEY_FILE};
+    ssl_certificate ${SCRAPING_ADMIN_TLS_CERT_FILE};
+    ssl_certificate_key ${SCRAPING_ADMIN_TLS_KEY_FILE};
     ssl_session_timeout 1d;
     ssl_session_cache shared:SSL:10m;
     ssl_session_tickets off;
@@ -31,8 +31,8 @@ server {
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     location /oauth2/ {
-        set $fashion_crawler_admin_auth_upstream http://fashion-crawler-admin-oauth2-proxy:4180;
-        proxy_pass $fashion_crawler_admin_auth_upstream;
+        set $scraping_admin_auth_upstream http://scraping-admin-oauth2-proxy:4180;
+        proxy_pass $scraping_admin_auth_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Auth-Request-Redirect $scheme://$host$request_uri;
@@ -43,8 +43,8 @@ server {
     }
 
     location = /oauth2/auth {
-        set $fashion_crawler_admin_auth_upstream http://fashion-crawler-admin-oauth2-proxy:4180;
-        proxy_pass $fashion_crawler_admin_auth_upstream;
+        set $scraping_admin_auth_upstream http://scraping-admin-oauth2-proxy:4180;
+        proxy_pass $scraping_admin_auth_upstream;
         proxy_http_version 1.1;
         proxy_pass_request_body off;
         proxy_set_header Content-Length "";
@@ -54,19 +54,19 @@ server {
         proxy_set_header X-Scheme https;
     }
 
-    location @fashion_crawler_admin_sign_in {
+    location @scraping_admin_sign_in {
         return 302 /oauth2/start?rd=$scheme://$host$request_uri;
     }
 
     location / {
-        set $fashion_crawler_admin_prod_upstream ${FASHION_CRAWLER_ADMIN_PROD_UPSTREAM};
+        set $scraping_admin_prod_upstream ${SCRAPING_ADMIN_PROD_UPSTREAM};
 
         auth_request /oauth2/auth;
-        error_page 401 = @fashion_crawler_admin_sign_in;
+        error_page 401 = @scraping_admin_sign_in;
         auth_request_set $auth_user $upstream_http_x_auth_request_user;
         auth_request_set $auth_email $upstream_http_x_auth_request_email;
 
-        proxy_pass $fashion_crawler_admin_prod_upstream;
+        proxy_pass $scraping_admin_prod_upstream;
         proxy_http_version 1.1;
         proxy_read_timeout 300s;
         proxy_send_timeout 300s;

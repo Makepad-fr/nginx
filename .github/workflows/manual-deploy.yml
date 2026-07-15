@@ -44,9 +44,7 @@ jobs:
           MAKEPAD_PROXY_VIF_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_VIF_APP_NETWORK }}
           MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK }}
           MAKEPAD_PROXY_EVIDELLA_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_EVIDELLA_APP_NETWORK }}
-          MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK }}
-          FASHION_CRAWLER_ADMIN_CLIENT_SECRET: ${{ secrets.FASHION_CRAWLER_ADMIN_CLIENT_SECRET }}
-          FASHION_CRAWLER_ADMIN_OAUTH_COOKIE_SECRET: ${{ secrets.FASHION_CRAWLER_ADMIN_OAUTH_COOKIE_SECRET }}
+          MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK }}
         run: |
           set -euo pipefail
           for required_network in \
@@ -57,9 +55,7 @@ jobs:
             MAKEPAD_PROXY_VIF_APP_NETWORK \
             MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK \
             MAKEPAD_PROXY_EVIDELLA_APP_NETWORK \
-            MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK \
-            FASHION_CRAWLER_ADMIN_CLIENT_SECRET \
-            FASHION_CRAWLER_ADMIN_OAUTH_COOKIE_SECRET; do
+            MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK; do
             if [[ -z "${!required_network}" ]]; then
               echo "::error::Missing required production secret: ${required_network}" >&2
               exit 1
@@ -79,7 +75,7 @@ jobs:
           cp sites/vif-prod.conf.template "${bundle_root}/sites/vif-prod.conf.template"
           cp sites/makepad-landing-prod.conf.template "${bundle_root}/sites/makepad-landing-prod.conf.template"
           cp sites/evidella-prod.conf.template "${bundle_root}/sites/evidella-prod.conf.template"
-          cp sites/fashion-crawler-admin-prod.conf.template "${bundle_root}/sites/fashion-crawler-admin-prod.conf.template"
+          cp sites/scraping-admin-prod.conf.template "${bundle_root}/sites/scraping-admin-prod.conf.template"
           {
             echo "MAKEPAD_PROXY_PROD_APP_NETWORK=${MAKEPAD_PROXY_PROD_APP_NETWORK}"
             echo "MAKEPAD_PROXY_CANARY_APP_NETWORK=${MAKEPAD_PROXY_CANARY_APP_NETWORK}"
@@ -88,9 +84,7 @@ jobs:
             echo "MAKEPAD_PROXY_VIF_APP_NETWORK=${MAKEPAD_PROXY_VIF_APP_NETWORK}"
             echo "MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK=${MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK}"
             echo "MAKEPAD_PROXY_EVIDELLA_APP_NETWORK=${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}"
-            echo "MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK=${MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK}"
-            echo "FASHION_CRAWLER_ADMIN_OAUTH_CLIENT_SECRET=${FASHION_CRAWLER_ADMIN_CLIENT_SECRET}"
-            echo "FASHION_CRAWLER_ADMIN_OAUTH_COOKIE_SECRET=${FASHION_CRAWLER_ADMIN_OAUTH_COOKIE_SECRET}"
+            echo "MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK=${MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK}"
           } > "${bundle_root}/envs/production/.env.deploy"
           chmod 600 "${bundle_root}/envs/production/.env.deploy"
 
@@ -129,7 +123,7 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/vif-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/vif-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/makepad-landing-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/makepad-landing-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/evidella-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/evidella-prod.conf.template"
-          scp "${scp_opts[@]}" "${bundle_root}/sites/fashion-crawler-admin-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/fashion-crawler-admin-prod.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/scraping-admin-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/scraping-admin-prod.conf.template"
 
           ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" <<'EOF'
           set -euo pipefail
@@ -145,7 +139,7 @@ jobs:
             "$(grep '^MAKEPAD_PROXY_VIF_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
             "$(grep '^MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
             "$(grep '^MAKEPAD_PROXY_EVIDELLA_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
-            "$(grep '^MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)"; do
+            "$(grep '^MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)"; do
             docker network inspect "${app_network}" >/dev/null 2>&1 \
               || docker network create --driver overlay --attachable "${app_network}"
           done

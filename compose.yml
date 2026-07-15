@@ -17,6 +17,8 @@ configs:
     file: ./sites/evidella-prod.conf.template
   openpanel_prod_conf:
     file: ./sites/openpanel-prod.conf.template
+  runtrace_prod_conf:
+    file: ./sites/runtrace-prod.conf.template
 
 services:
   nginx:
@@ -39,6 +41,8 @@ services:
       OPENPANEL_API_UPSTREAM: ${OPENPANEL_API_UPSTREAM:-http://openpanel-api:3000}
       OPENPANEL_DASHBOARD_UPSTREAM: ${OPENPANEL_DASHBOARD_UPSTREAM:-http://openpanel-dashboard:3000}
       OPENPANEL_OAUTH2_PROXY_UPSTREAM: ${OPENPANEL_OAUTH2_PROXY_UPSTREAM:-http://openpanel-oauth2-proxy:4180}
+      RUNTRACE_PROD_SERVER_NAME: ${RUNTRACE_PROD_SERVER_NAME:-runtrace.localhost}
+      RUNTRACE_PROD_UPSTREAM: ${RUNTRACE_PROD_UPSTREAM:-http://runtrace-prod-app:8080}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
@@ -53,6 +57,8 @@ services:
       EVIDELLA_TLS_KEY_FILE: ${EVIDELLA_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       OPENPANEL_TLS_CERT_FILE: ${OPENPANEL_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       OPENPANEL_TLS_KEY_FILE: ${OPENPANEL_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      RUNTRACE_TLS_CERT_FILE: ${RUNTRACE_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      RUNTRACE_TLS_KEY_FILE: ${RUNTRACE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
       - source: common_conf
@@ -73,6 +79,8 @@ services:
         target: /etc/nginx/templates/evidella-prod.conf.template
       - source: openpanel_prod_conf
         target: /etc/nginx/templates/openpanel-prod.conf.template
+      - source: runtrace_prod_conf
+        target: /etc/nginx/templates/runtrace-prod.conf.template
     networks:
       - prod_app
       - canary_app
@@ -82,6 +90,7 @@ services:
       - makepad_landing_prod_app
       - evidella_prod_app
       - openpanel_prod_app
+      - runtrace_prod_app
 
 networks:
   prod_app:
@@ -92,3 +101,4 @@ networks:
   makepad_landing_prod_app:
   evidella_prod_app:
   openpanel_prod_app:
+  runtrace_prod_app:

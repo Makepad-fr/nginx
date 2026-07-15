@@ -55,3 +55,6 @@ networks:
   openpanel_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_OPENPANEL_APP_NETWORK}
+  runtrace_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}

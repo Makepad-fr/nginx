@@ -51,6 +51,9 @@ networks:
   evidella_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}
+  openpanel_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_OPENPANEL_APP_NETWORK}
   scraping_admin_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK}

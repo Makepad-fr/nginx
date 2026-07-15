@@ -15,6 +15,8 @@ configs:
     file: ./sites/makepad-landing-prod.conf.template
   evidella_prod_conf:
     file: ./sites/evidella-prod.conf.template
+  openpanel_prod_conf:
+    file: ./sites/openpanel-prod.conf.template
   scraping_admin_prod_conf:
     file: ./sites/scraping-admin-prod.conf.template
 
@@ -35,6 +37,10 @@ services:
       EVIDELLA_PROD_SERVER_NAME: ${EVIDELLA_PROD_SERVER_NAME:-evidella.localhost}
       EVIDELLA_WWW_SERVER_NAME: ${EVIDELLA_WWW_SERVER_NAME:-www.evidella.localhost}
       EVIDELLA_PROD_UPSTREAM: ${EVIDELLA_PROD_UPSTREAM:-http://opsbrainlanding-prod-app:8080}
+      OPENPANEL_PROD_SERVER_NAME: ${OPENPANEL_PROD_SERVER_NAME:-analytics.localhost}
+      OPENPANEL_DASHBOARD_UPSTREAM: ${OPENPANEL_DASHBOARD_UPSTREAM:-http://openpanel-dashboard:3000}
+      OPENPANEL_API_UPSTREAM: ${OPENPANEL_API_UPSTREAM:-http://openpanel-api:3000}
+      OPENPANEL_OAUTH2_PROXY_UPSTREAM: ${OPENPANEL_OAUTH2_PROXY_UPSTREAM:-http://openpanel-oauth2-proxy:4180}
       SCRAPING_ADMIN_PROD_SERVER_NAME: ${SCRAPING_ADMIN_PROD_SERVER_NAME:-scraping.localhost}
       SCRAPING_ADMIN_PROD_UPSTREAM: ${SCRAPING_ADMIN_PROD_UPSTREAM:-http://scraping-admin:8088}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
@@ -49,6 +55,8 @@ services:
       MAKEPAD_LANDING_TLS_KEY_FILE: ${MAKEPAD_LANDING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       EVIDELLA_TLS_CERT_FILE: ${EVIDELLA_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       EVIDELLA_TLS_KEY_FILE: ${EVIDELLA_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      OPENPANEL_TLS_CERT_FILE: ${OPENPANEL_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      OPENPANEL_TLS_KEY_FILE: ${OPENPANEL_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       SCRAPING_ADMIN_TLS_CERT_FILE: ${SCRAPING_ADMIN_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       SCRAPING_ADMIN_TLS_KEY_FILE: ${SCRAPING_ADMIN_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
@@ -69,6 +77,8 @@ services:
         target: /etc/nginx/templates/makepad-landing-prod.conf.template
       - source: evidella_prod_conf
         target: /etc/nginx/templates/evidella-prod.conf.template
+      - source: openpanel_prod_conf
+        target: /etc/nginx/templates/openpanel-prod.conf.template
       - source: scraping_admin_prod_conf
         target: /etc/nginx/templates/scraping-admin-prod.conf.template
     networks:
@@ -79,6 +89,7 @@ services:
       - vif_prod_app
       - makepad_landing_prod_app
       - evidella_prod_app
+      - openpanel_prod_app
       - scraping_admin_prod_app
 
 networks:
@@ -89,4 +100,5 @@ networks:
   vif_prod_app:
   makepad_landing_prod_app:
   evidella_prod_app:
+  openpanel_prod_app:
   scraping_admin_prod_app:

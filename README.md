@@ -63,9 +63,9 @@ Required environment secrets:
 - `MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK`
 - `MAKEPAD_PROXY_EVIDELLA_APP_NETWORK`
 - `MAKEPAD_PROXY_OPENPANEL_APP_NETWORK`
-- `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK`
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
+`MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is optional and defaults to `makepad_runtrace_prod_app`, matching the Runtrace app deployment template; set it only if the Runtrace app stack uses a different overlay network name.
 
 ## TLS
 

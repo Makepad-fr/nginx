@@ -31,7 +31,7 @@ The proxy joins shared external overlay networks:
 - `${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}`
 - `${MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK}`
 
-Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`. `makepad.fr` proxies to `MAKEPAD_LANDING_PROD_UPSTREAM`, which defaults to `http://makepad-landing-prod-app:8080`; `www.makepad.fr` redirects permanently to `makepad.fr`. `evidella.com` proxies to `EVIDELLA_PROD_UPSTREAM`, which defaults to `http://opsbrainlanding-prod-app:8080`; `www.evidella.com` redirects permanently to `evidella.com`. `scraping.makepad.fr` proxies to `SCRAPING_ADMIN_PROD_UPSTREAM`, which defaults to `http://scraping-admin:8088`, after nginx validates the user session with the app-owned `scraping-admin-oauth2-proxy` GitHub auth gate.
+Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`. `makepad.fr` proxies to `MAKEPAD_LANDING_PROD_UPSTREAM`, which defaults to `http://makepad-landing-prod-app:8080`; `www.makepad.fr` redirects permanently to `makepad.fr`. `evidella.com` proxies to `EVIDELLA_PROD_UPSTREAM`, which defaults to `http://opsbrainlanding-prod-app:8080`; `www.evidella.com` redirects permanently to `evidella.com`. `backinmysize.com` proxies to `BACKINMYSIZE_PROD_UPSTREAM`, which defaults to `http://backinmysize-prod-app:8091`; `www.backinmysize.com` redirects permanently to `backinmysize.com`. `scraping.makepad.fr` proxies to `SCRAPING_ADMIN_PROD_UPSTREAM`, which defaults to `http://scraping-admin:8088`, after nginx validates the user session with the app-owned `scraping-admin-oauth2-proxy` GitHub auth gate.
 
 The Scraping admin route is publicly reachable over HTTPS for the initial deployment, but requests are blocked until the Scraping app stack's GitHub username gate succeeds. When OpenConnexa is available, restrict `scraping.makepad.fr` at this proxy or network boundary without changing the Scraping admin upstream contract.
 
@@ -86,6 +86,13 @@ For `evidella.com` and `www.evidella.com`, the production proxy expects a certif
 - `/etc/letsencrypt/live/evidella.com/privkey.pem`
 
 The `evidella.com` and `www.evidella.com` DNS records must point to the proxy VM before issuing the certificate or deploying the HTTPS route.
+
+For `backinmysize.com` and `www.backinmysize.com`, the production proxy expects a certificate that covers both names:
+
+- `/etc/letsencrypt/live/backinmysize.com/fullchain.pem`
+- `/etc/letsencrypt/live/backinmysize.com/privkey.pem`
+
+The `backinmysize.com` and `www.backinmysize.com` DNS records must point to the proxy VM before issuing the certificate or deploying the HTTPS route.
 
 For `scraping.makepad.fr`, the production proxy expects:
 

@@ -29,6 +29,30 @@ server {
     ssl_prefer_server_ciphers off;
 
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+
+    client_max_body_size 4m;
+    client_body_timeout 60s;
+
+    location = /telemetry-batches {
+        client_max_body_size 64m;
+        client_body_timeout 300s;
+        set $runtrace_prod_upstream ${RUNTRACE_PROD_UPSTREAM};
+        proxy_pass $runtrace_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_request_buffering on;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
 
     location / {
         set $runtrace_prod_upstream ${RUNTRACE_PROD_UPSTREAM};
@@ -37,11 +61,11 @@ server {
         proxy_buffer_size 32k;
         proxy_buffers 8 32k;
         proxy_busy_buffers_size 64k;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_set_header Connection $connection_upgrade;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Proto https;

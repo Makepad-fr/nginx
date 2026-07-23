@@ -34,6 +34,10 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > "${HOME}/.ssh/id_ed25519"
           chmod 600 "${HOME}/.ssh/id_ed25519"
 
+      - name: Validate Runtrace proxy policy
+        shell: bash
+        run: scripts/test-runtrace-upload-policy.sh
+
       - name: Prepare deployment bundle
         shell: bash
         env:

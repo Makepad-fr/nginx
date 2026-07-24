@@ -7,7 +7,7 @@ suffix="${RANDOM}-$$"
 network="runtrace-nginx-test-${suffix}"
 upstream="runtrace-upstream-${suffix}"
 proxy="runtrace-proxy-${suffix}"
-nginx_image="nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236"
+nginx_image="nginx:1.30-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46"
 
 for expected in \
   'zone=runtrace_general:10m rate=30r/s' \

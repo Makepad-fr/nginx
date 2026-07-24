@@ -2,3 +2,9 @@ map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;
 }
+
+# Runtrace has a dedicated fleet-ingest budget so agent bursts cannot starve
+# administrator and public product traffic on the shared proxy.
+limit_req_zone $binary_remote_addr zone=runtrace_general:10m rate=30r/s;
+limit_req_zone $binary_remote_addr zone=runtrace_telemetry:10m rate=2r/s;
+limit_conn_zone $binary_remote_addr zone=runtrace_connections:10m;

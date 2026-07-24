@@ -35,10 +35,14 @@ server {
 
     client_max_body_size 4m;
     client_body_timeout 60s;
+    limit_req_status 429;
+    limit_conn_status 429;
+    limit_conn runtrace_connections 40;
 
     location = /telemetry-batches {
         client_max_body_size 64m;
         client_body_timeout 300s;
+        limit_req zone=runtrace_telemetry burst=5 nodelay;
         set $runtrace_prod_upstream ${RUNTRACE_PROD_UPSTREAM};
         proxy_pass $runtrace_prod_upstream;
         proxy_http_version 1.1;
@@ -55,6 +59,7 @@ server {
     }
 
     location / {
+        limit_req zone=runtrace_general burst=60 nodelay;
         set $runtrace_prod_upstream ${RUNTRACE_PROD_UPSTREAM};
         proxy_pass $runtrace_prod_upstream;
         proxy_http_version 1.1;

@@ -9,6 +9,27 @@ upstream="runtrace-upstream-${suffix}"
 proxy="runtrace-proxy-${suffix}"
 nginx_image="nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236"
 
+for expected in \
+  'zone=runtrace_general:10m rate=30r/s' \
+  'zone=runtrace_telemetry:10m rate=2r/s' \
+  "limit_conn_zone \$binary_remote_addr zone=runtrace_connections:10m"; do
+  if ! grep -Fq -- "${expected}" "${repo_root}/sites/00-common.conf.template"; then
+    echo "Runtrace shared proxy policy is missing: ${expected}" >&2
+    exit 1
+  fi
+done
+for expected in \
+  'limit_req_status 429' \
+  'limit_conn_status 429' \
+  'limit_conn runtrace_connections 40' \
+  'limit_req zone=runtrace_telemetry burst=5 nodelay' \
+  'limit_req zone=runtrace_general burst=60 nodelay'; do
+  if ! grep -Fq -- "${expected}" "${repo_root}/sites/runtrace-prod.conf.template"; then
+    echo "Runtrace virtual host policy is missing: ${expected}" >&2
+    exit 1
+  fi
+done
+
 cleanup() {
   docker rm -f "${proxy}" "${upstream}" >/dev/null 2>&1 || true
   docker network rm "${network}" >/dev/null 2>&1 || true

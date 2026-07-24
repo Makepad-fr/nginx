@@ -12,7 +12,9 @@ nginx_image="nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d5
 for expected in \
   'zone=runtrace_general:10m rate=30r/s' \
   'zone=runtrace_telemetry:10m rate=2r/s' \
-  "limit_conn_zone \$binary_remote_addr zone=runtrace_connections:10m"; do
+  "limit_conn_zone \$binary_remote_addr zone=runtrace_connections:10m" \
+  'log_format runtrace_json escape=json' \
+  '"request_id":"$request_id"'; do
   if ! grep -Fq -- "${expected}" "${repo_root}/sites/00-common.conf.template"; then
     echo "Runtrace shared proxy policy is missing: ${expected}" >&2
     exit 1
@@ -23,7 +25,11 @@ for expected in \
   'limit_conn_status 429' \
   'limit_conn runtrace_connections 40' \
   'limit_req zone=runtrace_telemetry burst=5 nodelay' \
-  'limit_req zone=runtrace_general burst=60 nodelay'; do
+  'limit_req zone=runtrace_general burst=60 nodelay' \
+  'access_log /dev/stdout runtrace_json' \
+  'add_header X-Request-ID $request_id always' \
+  'proxy_set_header X-Request-ID $request_id' \
+  'proxy_hide_header X-Request-ID'; do
   if ! grep -Fq -- "${expected}" "${repo_root}/sites/runtrace-prod.conf.template"; then
     echo "Runtrace virtual host policy is missing: ${expected}" >&2
     exit 1
@@ -57,6 +63,7 @@ printf '%s\n' \
   'server {' \
   '    listen 80;' \
   '    client_max_body_size 70m;' \
+  '    add_header X-Upstream-Request-ID $http_x_request_id always;' \
   '    location / { return 204; }' \
   '}' > "${work_dir}/upstream-conf/default.conf"
 
@@ -115,10 +122,57 @@ assert_status() {
 }
 
 wait_for_proxy
+headers_file="${work_dir}/response-headers"
+curl -ksS --resolve "runtrace.localhost:${proxy_port}:127.0.0.1" \
+  -D "${headers_file}" \
+  -o /dev/null \
+  "https://runtrace.localhost:${proxy_port}/healthz?organizationSlug=must-not-be-logged"
+request_id=$(awk 'tolower($1) == "x-request-id:" {gsub("\r", "", $2); print $2}' "${headers_file}" | tail -1)
+upstream_request_id=$(awk 'tolower($1) == "x-upstream-request-id:" {gsub("\r", "", $2); print $2}' "${headers_file}" | tail -1)
+if [[ ! "${request_id}" =~ ^[a-f0-9]{32}$ || "${request_id}" != "${upstream_request_id}" ]]; then
+  echo "Runtrace request ID was not consistently propagated through the proxy (response=${request_id:-missing}, upstream=${upstream_request_id:-missing})." >&2
+  exit 1
+fi
+
 assert_status 204 "$(post_bytes /telemetry-batches 1)" "1 MiB telemetry upload"
 assert_status 204 "$(post_bytes /telemetry-batches 10)" "10 MiB telemetry upload"
 assert_status 204 "$(post_bytes /telemetry-batches 64)" "64 MiB telemetry upload"
 assert_status 413 "$(post_bytes /telemetry-batches 65)" "65 MiB telemetry upload"
 assert_status 413 "$(post_bytes /admin/settings 5)" "5 MiB general request"
+
+sleep 0.2
+proxy_logs=$(docker logs "${proxy}" 2>&1)
+access_logs=$(printf '%s\n' "${proxy_logs}" | awk '/^\{/')
+if ! printf '%s\n' "${access_logs}" | grep -Fq '"request_id":"'; then
+  echo "Runtrace proxy did not emit structured request correlation logs." >&2
+  exit 1
+fi
+for forbidden in 'organizationSlug' 'must-not-be-logged' '/healthz' '/telemetry-batches' '/admin/settings'; do
+  if printf '%s\n' "${access_logs}" | grep -Fq "${forbidden}"; then
+    echo "Runtrace JSON access log exposed a URL or query value: ${forbidden}" >&2
+    exit 1
+  fi
+done
+printf '%s\n' "${access_logs}" | python3 -c '
+import json
+import sys
+
+records = [json.loads(line) for line in sys.stdin if line.startswith("{")]
+if not records:
+    raise SystemExit("no Runtrace JSON access records found")
+required = {
+    "timestamp",
+    "request_id",
+    "method",
+    "status",
+    "request_bytes",
+    "response_bytes",
+    "request_time_seconds",
+    "upstream_status",
+    "upstream_response_time_seconds",
+}
+if any(set(record) != required for record in records):
+    raise SystemExit("Runtrace JSON access record has an unexpected field set")
+'
 
 echo "Runtrace nginx upload policy passed."

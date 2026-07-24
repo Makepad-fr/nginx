@@ -3,6 +3,20 @@ map $http_upgrade $connection_upgrade {
     '' close;
 }
 
+# Keep the shared proxy log useful for correlation without recording URLs,
+# query strings, IP addresses, headers, request bodies, or tenant identifiers.
+log_format runtrace_json escape=json '{'
+    '"timestamp":"$time_iso8601",'
+    '"request_id":"$request_id",'
+    '"method":"$request_method",'
+    '"status":"$status",'
+    '"request_bytes":"$request_length",'
+    '"response_bytes":"$body_bytes_sent",'
+    '"request_time_seconds":"$request_time",'
+    '"upstream_status":"$upstream_status",'
+    '"upstream_response_time_seconds":"$upstream_response_time"'
+    '}';
+
 # Runtrace has a dedicated fleet-ingest budget so agent bursts cannot starve
 # administrator and public product traffic on the shared proxy.
 limit_req_zone $binary_remote_addr zone=runtrace_general:10m rate=30r/s;

@@ -1,0 +1,233 @@
+map $http_accept $vestiaire_product_representation {
+    default unsupported;
+    "" json;
+    "*/*" json;
+    ~*application/([a-z0-9.+-]+\+)?json json;
+    ~*text/html html;
+    ~*application/\* json;
+    ~*\*/\* json;
+}
+
+map $vestiaire_product_representation $vestiaire_product_resource_upstream {
+    default "";
+    json ${VESTIAIRE_CATALOG_API_PROD_UPSTREAM};
+    html ${VESTIAIRE_WEB_PROD_UPSTREAM};
+}
+
+map $vestiaire_product_representation $vestiaire_product_authorization {
+    default "";
+    json $http_authorization;
+}
+
+map $vestiaire_product_representation $vestiaire_product_cookie {
+    default "";
+    html $http_cookie;
+}
+
+map $vestiaire_product_representation $vestiaire_product_unavailable_uri {
+    default /__vestiaire_catalog_unavailable;
+    json /__vestiaire_catalog_unavailable;
+    html /__vestiaire_web_unavailable;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${VESTIAIRE_PROD_SERVER_NAME};
+
+    location /.well-known/acme-challenge/ {
+        root ${CATWLK_ACME_WEBROOT};
+        default_type text/plain;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${VESTIAIRE_PROD_SERVER_NAME};
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    ssl_certificate ${VESTIAIRE_TLS_CERT_FILE};
+    ssl_certificate_key ${VESTIAIRE_TLS_KEY_FILE};
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    client_max_body_size 64k;
+
+    location = /__vestiaire_catalog_unavailable {
+        internal;
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header Retry-After "60" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Vary Accept always;
+        return 503 '{"code":"service_unavailable","message":"The catalog service is temporarily unavailable"}\n';
+    }
+
+    location = /__vestiaire_web_unavailable {
+        internal;
+        default_type text/html;
+        add_header Cache-Control "no-store" always;
+        add_header Retry-After "60" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Vary Accept always;
+        return 503 '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Service unavailable</title></head><body><main><h1>Service temporarily unavailable</h1><p>Please retry shortly.</p></main></body></html>\n';
+    }
+
+    location = /__vestiaire_developer_unavailable {
+        internal;
+        default_type text/html;
+        add_header Cache-Control "no-store" always;
+        add_header Retry-After "60" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        return 503 '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Service unavailable</title></head><body><main><h1>Developer portal temporarily unavailable</h1><p>Please retry shortly.</p></main></body></html>\n';
+    }
+
+    location = /__vestiaire_developer_api_unavailable {
+        internal;
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        add_header Retry-After "60" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        return 503 '{"code":"service_unavailable","message":"The developer platform is temporarily unavailable"}\n';
+    }
+
+    # The portal owns its OIDC callback, assets, logout, and error boundary.
+    location ^~ /developers {
+        set $vestiaire_developer_platform_prod_upstream ${VESTIAIRE_DEVELOPER_PLATFORM_PROD_UPSTREAM};
+        proxy_pass $vestiaire_developer_platform_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_intercept_errors on;
+        error_page 502 504 = /__vestiaire_developer_unavailable;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Connection "";
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        access_log /var/log/nginx/access.log vestiaire_developer;
+    }
+
+    # Tenant resources are deliberately unversioned and remain under the same origin.
+    location ~ "^/(?:current-user|organizations(?:/.*)?)$" {
+        set $vestiaire_developer_platform_prod_upstream ${VESTIAIRE_DEVELOPER_PLATFORM_PROD_UPSTREAM};
+        proxy_pass $vestiaire_developer_platform_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_intercept_errors on;
+        error_page 502 504 = /__vestiaire_developer_api_unavailable;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Connection "";
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        access_log /var/log/nginx/access.log vestiaire_developer;
+    }
+
+    # Probes and facets have no HTML representation.
+    location ~ "^/(?:healthz|readyz|product-offers/facets)$" {
+        set $vestiaire_catalog_api_prod_upstream ${VESTIAIRE_CATALOG_API_PROD_UPSTREAM};
+        proxy_pass $vestiaire_catalog_api_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_intercept_errors on;
+        error_page 502 504 = /__vestiaire_catalog_unavailable;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Connection "";
+        proxy_set_header Cookie "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        access_log /var/log/nginx/access.log vestiaire_catalog_api;
+    }
+
+    # Browser navigation receives HTML; API clients receive JSON at the same resource URI.
+    location ~ "^/product-offers(?:/[a-f0-9]{64})?$" {
+        if ($vestiaire_product_representation = unsupported) {
+            return 406 '{"error":"not_acceptable","accepted":["application/json","text/html"]}\n';
+        }
+
+        proxy_pass $vestiaire_product_resource_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_intercept_errors on;
+        error_page 502 504 = $vestiaire_product_unavailable_uri;
+        proxy_set_header Authorization $vestiaire_product_authorization;
+        proxy_set_header Connection "";
+        proxy_set_header Cookie $vestiaire_product_cookie;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header Vary Accept always;
+        default_type application/json;
+        access_log /var/log/nginx/access.log vestiaire_catalog_api;
+    }
+
+    # Keep malformed or future product-offer subresources inside the API boundary.
+    location ~ "^/product-offers/" {
+        set $vestiaire_catalog_api_prod_upstream ${VESTIAIRE_CATALOG_API_PROD_UPSTREAM};
+        proxy_pass $vestiaire_catalog_api_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_intercept_errors on;
+        error_page 502 504 = /__vestiaire_catalog_unavailable;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Connection "";
+        proxy_set_header Cookie "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        access_log /var/log/nginx/access.log vestiaire_catalog_api;
+    }
+
+    location / {
+        set $vestiaire_web_prod_upstream ${VESTIAIRE_WEB_PROD_UPSTREAM};
+        proxy_pass $vestiaire_web_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_intercept_errors on;
+        error_page 502 504 = /__vestiaire_web_unavailable;
+        proxy_set_header Authorization "";
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}

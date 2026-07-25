@@ -48,6 +48,9 @@ networks:
   makepad_landing_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK}
+  runtrace_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}
   evidella_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}
@@ -60,3 +63,12 @@ networks:
   scraping_admin_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK}
+  vestiaire_web_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VESTIAIRE_WEB_APP_NETWORK}
+  vestiaire_catalog_api_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VESTIAIRE_CATALOG_API_APP_NETWORK}
+  vestiaire_developer_platform_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VESTIAIRE_DEVELOPER_PLATFORM_APP_NETWORK}

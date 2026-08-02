@@ -1,14 +1,6 @@
 name: Deploy Nginx
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "compose.yml"
-      - "envs/production/**"
-      - "sites/**"
-      - ".github/workflows/manual-deploy.yml"
   workflow_dispatch:
 
 concurrency:
@@ -160,7 +152,9 @@ jobs:
             config > "${remote_dir}/stack.rendered.yml"
 
           python3 - "${remote_dir}/stack.rendered.yml" "${remote_dir}/stack.yml" <<'PY'
+          import hashlib
           from pathlib import Path
+          import re
           import sys
 
           source = Path(sys.argv[1])
@@ -168,6 +162,17 @@ jobs:
           text = source.read_text()
           text = text.replace('published: "80"', 'published: 80')
           text = text.replace('published: "443"', 'published: 443')
+          text = re.sub(
+              r'(?m)^(\s*cpus:)\s*([0-9]+(?:\.[0-9]+)?)\s*$',
+              r'\1 "\2"',
+              text,
+          )
+          config_revision = hashlib.sha256(text.encode()).hexdigest()[:12]
+          text = re.sub(
+              r'(?m)^(\s+name: nginx_[a-z0-9_]+)$',
+              rf'\1_{config_revision}',
+              text,
+          )
           text = "\n".join(line for line in text.splitlines() if line != "name: nginx") + "\n"
           target.write_text(text)
           PY

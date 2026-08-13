@@ -27,7 +27,7 @@ source, target = map(Path, sys.argv[1:])
 text = source.read_text().replace('published: "80"', 'published: 80').replace('published: "443"', 'published: 443')
 text = re.sub(r'(?m)^(\s*cpus:)\s*([0-9]+(?:\.[0-9]+)?)\s*$', r'\1 "\2"', text)
 revision = hashlib.sha256(text.encode()).hexdigest()[:12]
-text = re.sub(r'(?m)^(\s+name: nginx_[a-z0-9_]+)$', rf'\1_{revision}', text)
+text = re.sub(r'(?m)^(\s+name: nginx_(?!fresko_)[a-z0-9_]+)$', rf'\1_{revision}', text)
 text = "\n".join(line for line in text.splitlines() if line != "name: nginx") + "\n"
 target.write_text(text)
 PY

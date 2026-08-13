@@ -70,3 +70,6 @@ networks:
   runtrace_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}
+  betacrew_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_BETACREW_APP_NETWORK}

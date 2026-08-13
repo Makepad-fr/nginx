@@ -13,6 +13,7 @@ This repository owns the shared proxy stack for application VMs. Application rep
 - `sites/vif-prod.conf.template`: Vif virtual host template
 - `sites/makepad-landing-prod.conf.template`: Makepad landing site virtual host template
 - `sites/runtrace-prod.conf.template`: Runtrace virtual host template for `runtrace.co`
+- `sites/betacrew-prod.conf.template`: BetaCrew virtual host and root-domain redirect
 - `sites/evidella-prod.conf.template`: Evidella landing site virtual host template
 - `sites/openpanel-prod.conf.template`: OpenPanel analytics virtual host template
 - `envs/production/compose.yml`: production Swarm overrides
@@ -31,9 +32,11 @@ The proxy joins shared external overlay networks:
 - `${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}`
 - `${MAKEPAD_PROXY_OPENPANEL_APP_NETWORK}`
 - `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`
+- `${MAKEPAD_PROXY_BETACREW_APP_NETWORK}`
 
 Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`. `makepad.fr` proxies to `MAKEPAD_LANDING_PROD_UPSTREAM`, which defaults to `http://makepad-landing-prod-app:8080`; `www.makepad.fr` redirects permanently to `makepad.fr`. `evidella.com` proxies to `EVIDELLA_PROD_UPSTREAM`, which defaults to `http://opsbrainlanding-prod-app:8080`; `www.evidella.com` redirects permanently to `evidella.com`.
 `runtrace.co` proxies to `RUNTRACE_PROD_UPSTREAM`, which defaults to `http://runtrace-prod-app:8080`; the Runtrace app stack must attach to the same network value as `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`.
+`betacrew.app` proxies to `BETACREW_PROD_UPSTREAM`, which defaults to `http://betacrew-prod-app:8080`; `www.betacrew.app` redirects permanently to the root hostname. The host permits 6 MiB uploads and adds HSTS, frame, MIME, and referrer protections.
 
 The Runtrace virtual host permits request bodies up to 64 MiB only on `POST /telemetry-batches`. Other Runtrace routes retain a 4 MiB proxy ceiling. Per-client request and connection budgets isolate fleet ingestion from normal administrator and public traffic; rejected excess traffic receives HTTP 429. Nginx generates one `X-Request-ID`, forwards it to Runtrace, and returns it on every response. The Runtrace access log is structured JSON with that ID, method, status, byte counts, and timing only; it intentionally excludes URLs, query strings, IP addresses, headers, bodies, and tenant identifiers. The production service also has CPU/memory reservations and limits plus bounded JSON logs. Before deployment, run `scripts/test-runtrace-upload-policy.sh`; it validates these controls, renders the production template, validates it with nginx, proves request-ID correlation and log privacy, and exercises the accepted and rejected upload boundaries through disposable containers.
 

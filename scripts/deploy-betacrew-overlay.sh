@@ -11,9 +11,12 @@ stack_file=$(mktemp)
 cleanup() { find "${rendered}" "${stack_file}" -delete 2>/dev/null || true; }
 trap cleanup EXIT HUP INT TERM
 
+env_files=(--env-file envs/production/.env.proxy)
+if [[ -f envs/production/.env.deploy ]]; then env_files+=(--env-file envs/production/.env.deploy); fi
+env_files+=(--env-file envs/production/.env.betacrew)
+
 BETACREW_NGINX_TEMPLATE="${template}" docker compose \
-  --env-file envs/production/.env.proxy \
-  --env-file envs/production/.env.betacrew \
+  "${env_files[@]}" \
   -f compose.yml -f envs/production/compose.yml -f compose.betacrew.yml \
   config > "${rendered}"
 

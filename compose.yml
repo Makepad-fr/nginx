@@ -19,6 +19,8 @@ configs:
     file: ./sites/openpanel-prod.conf.template
   runtrace_prod_conf:
     file: ./sites/runtrace-prod.conf.template
+  betacrew_prod_conf:
+    file: ./sites/betacrew-prod.conf.template
 
 services:
   nginx:
@@ -43,6 +45,9 @@ services:
       OPENPANEL_OAUTH2_PROXY_UPSTREAM: ${OPENPANEL_OAUTH2_PROXY_UPSTREAM:-http://openpanel-oauth2-proxy:4180}
       RUNTRACE_PROD_SERVER_NAME: ${RUNTRACE_PROD_SERVER_NAME:-runtrace.localhost}
       RUNTRACE_PROD_UPSTREAM: ${RUNTRACE_PROD_UPSTREAM:-http://runtrace-prod-app:8080}
+      BETACREW_PROD_SERVER_NAME: ${BETACREW_PROD_SERVER_NAME:-betacrew.localhost}
+      BETACREW_WWW_SERVER_NAME: ${BETACREW_WWW_SERVER_NAME:-www.betacrew.localhost}
+      BETACREW_PROD_UPSTREAM: ${BETACREW_PROD_UPSTREAM:-http://betacrew-prod-app:8080}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
@@ -59,6 +64,9 @@ services:
       OPENPANEL_TLS_KEY_FILE: ${OPENPANEL_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       RUNTRACE_TLS_CERT_FILE: ${RUNTRACE_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       RUNTRACE_TLS_KEY_FILE: ${RUNTRACE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      BETACREW_TLS_CERT_FILE: ${BETACREW_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      BETACREW_TLS_KEY_FILE: ${BETACREW_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      BETACREW_ACME_WEBROOT: ${BETACREW_ACME_WEBROOT:-/var/lib/letsencrypt-betacrew}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
       - source: common_conf
@@ -81,6 +89,8 @@ services:
         target: /etc/nginx/templates/openpanel-prod.conf.template
       - source: runtrace_prod_conf
         target: /etc/nginx/templates/runtrace-prod.conf.template
+      - source: betacrew_prod_conf
+        target: /etc/nginx/templates/betacrew-prod.conf.template
     networks:
       - prod_app
       - canary_app
@@ -91,6 +101,7 @@ services:
       - evidella_prod_app
       - openpanel_prod_app
       - runtrace_prod_app
+      - betacrew_prod_app
 
 networks:
   prod_app:
@@ -102,3 +113,4 @@ networks:
   evidella_prod_app:
   openpanel_prod_app:
   runtrace_prod_app:
+  betacrew_prod_app:

@@ -66,6 +66,7 @@ services:
       RUNTRACE_TLS_KEY_FILE: ${RUNTRACE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       BETACREW_TLS_CERT_FILE: ${BETACREW_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       BETACREW_TLS_KEY_FILE: ${BETACREW_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      BETACREW_ACME_WEBROOT: ${BETACREW_ACME_WEBROOT:-/var/lib/letsencrypt-betacrew}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
       - source: common_conf

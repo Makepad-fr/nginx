@@ -38,6 +38,20 @@ Each application stack attaches to its corresponding shared network and exposes 
 `runtrace.co` proxies to `RUNTRACE_PROD_UPSTREAM`, which defaults to `http://runtrace-prod-app:8080`; the Runtrace app stack must attach to the same network value as `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`.
 `betacrew.app` proxies to `BETACREW_PROD_UPSTREAM`, which defaults to `http://betacrew-prod-app:8080`; `www.betacrew.app` redirects permanently to the root hostname. The host permits 6 MiB uploads and adds HSTS, frame, MIME, and referrer protections.
 
+BetaCrew uses app-owned ACME state so the non-root deployment account can
+renew its certificate without access to the shared private keys:
+
+```bash
+install -d -m 0700 /srv/makepad/nginx/betacrew-letsencrypt \
+  /srv/makepad/nginx/betacrew-certbot-work /srv/makepad/nginx/betacrew-certbot-logs
+install -d -m 0755 /srv/makepad/nginx/betacrew-acme
+certbot certonly --webroot -w /srv/makepad/nginx/betacrew-acme \
+  --config-dir /srv/makepad/nginx/betacrew-letsencrypt \
+  --work-dir /srv/makepad/nginx/betacrew-certbot-work \
+  --logs-dir /srv/makepad/nginx/betacrew-certbot-logs \
+  -d betacrew.app -d www.betacrew.app
+```
+
 The Runtrace virtual host permits request bodies up to 64 MiB only on `POST /telemetry-batches`. Other Runtrace routes retain a 4 MiB proxy ceiling. Per-client request and connection budgets isolate fleet ingestion from normal administrator and public traffic; rejected excess traffic receives HTTP 429. Nginx generates one `X-Request-ID`, forwards it to Runtrace, and returns it on every response. The Runtrace access log is structured JSON with that ID, method, status, byte counts, and timing only; it intentionally excludes URLs, query strings, IP addresses, headers, bodies, and tenant identifiers. The production service also has CPU/memory reservations and limits plus bounded JSON logs. Before deployment, run `scripts/test-runtrace-upload-policy.sh`; it validates these controls, renders the production template, validates it with nginx, proves request-ID correlation and log privacy, and exercises the accepted and rejected upload boundaries through disposable containers.
 
 ## Node Labels

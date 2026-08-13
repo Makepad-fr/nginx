@@ -14,6 +14,8 @@ services:
     volumes:
       - "${CATWLK_PROXY_LETSENCRYPT_HOST_PATH:-/etc/letsencrypt}:/etc/letsencrypt:ro"
       - "${CATWLK_PROXY_ACME_WEBROOT_HOST_PATH:-/var/lib/letsencrypt}:/var/lib/letsencrypt:ro"
+      - "${BETACREW_PROXY_LETSENCRYPT_HOST_PATH:-/srv/makepad/nginx/betacrew-letsencrypt}:/etc/letsencrypt-betacrew:ro"
+      - "${BETACREW_PROXY_ACME_WEBROOT_HOST_PATH:-/srv/makepad/nginx/betacrew-acme}:/var/lib/letsencrypt-betacrew:ro"
     logging:
       driver: json-file
       options:

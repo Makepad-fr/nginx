@@ -15,7 +15,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Configure SSH key
         shell: bash
@@ -26,9 +26,19 @@ jobs:
           printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > "${HOME}/.ssh/id_ed25519"
           chmod 600 "${HOME}/.ssh/id_ed25519"
 
+      - name: Trust configured SSH host key
+        uses: Makepad-fr/add-ssh-host-key-action@1b337540ffcece7215f38921dd2fa77ae7bdcbbd
+        with:
+          server_ip_address: ${{ secrets.DEPLOY_SSH_HOST }}
+          known_host_entry: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+
       - name: Validate Runtrace proxy policy
         shell: bash
         run: scripts/test-runtrace-upload-policy.sh
+
+      - name: Validate Amiary privacy policy
+        shell: bash
+        run: scripts/test-amiary-policy.sh
 
       - name: Prepare deployment bundle
         shell: bash
@@ -42,6 +52,8 @@ jobs:
           MAKEPAD_PROXY_EVIDELLA_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_EVIDELLA_APP_NETWORK }}
           MAKEPAD_PROXY_OPENPANEL_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_OPENPANEL_APP_NETWORK }}
           MAKEPAD_PROXY_RUNTRACE_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_RUNTRACE_APP_NETWORK || 'makepad_runtrace_prod_app' }}
+          MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK || 'makepad_amiary_prod_app' }}
+          MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK || 'makepad_amiary_canary_app' }}
         run: |
           set -euo pipefail
           for required_network in \
@@ -56,6 +68,15 @@ jobs:
             MAKEPAD_PROXY_RUNTRACE_APP_NETWORK; do
             if [[ -z "${!required_network}" ]]; then
               echo "::error::Missing required production secret: ${required_network}" >&2
+              exit 1
+            fi
+          done
+
+          for required_network in \
+            MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK \
+            MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK; do
+            if [[ -z "${!required_network}" ]]; then
+              echo "::error::Missing required Amiary network: ${required_network}" >&2
               exit 1
             fi
           done
@@ -75,6 +96,9 @@ jobs:
           cp sites/evidella-prod.conf.template "${bundle_root}/sites/evidella-prod.conf.template"
           cp sites/openpanel-prod.conf.template "${bundle_root}/sites/openpanel-prod.conf.template"
           cp sites/runtrace-prod.conf.template "${bundle_root}/sites/runtrace-prod.conf.template"
+          cp sites/amiary-prod.conf.template "${bundle_root}/sites/amiary-prod.conf.template"
+          cp sites/amiary-canary.conf.template "${bundle_root}/sites/amiary-canary.conf.template"
+          cp sites/amiary-common-proxy.conf "${bundle_root}/sites/amiary-common-proxy.conf"
           {
             echo "MAKEPAD_PROXY_PROD_APP_NETWORK=${MAKEPAD_PROXY_PROD_APP_NETWORK}"
             echo "MAKEPAD_PROXY_CANARY_APP_NETWORK=${MAKEPAD_PROXY_CANARY_APP_NETWORK}"
@@ -85,6 +109,8 @@ jobs:
             echo "MAKEPAD_PROXY_EVIDELLA_APP_NETWORK=${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}"
             echo "MAKEPAD_PROXY_OPENPANEL_APP_NETWORK=${MAKEPAD_PROXY_OPENPANEL_APP_NETWORK}"
             echo "MAKEPAD_PROXY_RUNTRACE_APP_NETWORK=${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}"
+            echo "MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK=${MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK}"
+            echo "MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK=${MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK}"
           } > "${bundle_root}/envs/production/.env.deploy"
 
       - name: Deploy via Docker Swarm
@@ -104,8 +130,8 @@ jobs:
           fi
           bundle_root="${RUNNER_TEMP}/bundle"
           remote_port=${REMOTE_PORT:-22}
-          ssh_opts=(-o StrictHostKeyChecking=accept-new -p "${remote_port}")
-          scp_opts=(-o StrictHostKeyChecking=accept-new -P "${remote_port}")
+          ssh_opts=(-o StrictHostKeyChecking=yes -p "${remote_port}")
+          scp_opts=(-o StrictHostKeyChecking=yes -P "${remote_port}")
           remote_target="${REMOTE_USER}@${REMOTE_HOST}"
 
           ssh "${ssh_opts[@]}" "${remote_target}" mkdir -p "${REMOTE_DIR}/envs/production" "${REMOTE_DIR}/sites"
@@ -123,6 +149,9 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/evidella-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/evidella-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/openpanel-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/openpanel-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/runtrace-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/runtrace-prod.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/amiary-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/amiary-prod.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/amiary-canary.conf.template" "${remote_target}:${REMOTE_DIR}/sites/amiary-canary.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/amiary-common-proxy.conf" "${remote_target}:${REMOTE_DIR}/sites/amiary-common-proxy.conf"
 
           ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" <<'EOF'
           set -euo pipefail
@@ -143,6 +172,24 @@ jobs:
             docker network inspect "${app_network}" >/dev/null 2>&1 \
               || docker network create --driver overlay --attachable "${app_network}"
           done
+
+          ensure_encrypted_amiary_network() {
+            local app_network=$1
+            if docker network inspect "${app_network}" >/dev/null 2>&1; then
+              local driver scope encrypted
+              driver=$(docker network inspect "${app_network}" --format '{{.Driver}}')
+              scope=$(docker network inspect "${app_network}" --format '{{.Scope}}')
+              encrypted=$(docker network inspect "${app_network}" --format '{{index .Options "encrypted"}}')
+              if [[ "${driver}" != overlay || "${scope}" != swarm || "${encrypted}" != true ]]; then
+                echo "Amiary network ${app_network} must be a Swarm overlay with encrypted=true; drain and recreate it before deploying." >&2
+                exit 1
+              fi
+              return
+            fi
+            docker network create --driver overlay --attachable --opt encrypted "${app_network}" >/dev/null
+          }
+          ensure_encrypted_amiary_network "$(grep '^MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)"
+          ensure_encrypted_amiary_network "$(grep '^MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)"
 
           docker compose \
             --env-file "${remote_dir}/envs/${deploy_env}/.env.proxy" \

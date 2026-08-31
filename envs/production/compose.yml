@@ -70,3 +70,9 @@ networks:
   runtrace_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}
+  amiary_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK}
+  amiary_canary_app:
+    external: true
+    name: ${MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK}

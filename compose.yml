@@ -19,6 +19,12 @@ configs:
     file: ./sites/openpanel-prod.conf.template
   runtrace_prod_conf:
     file: ./sites/runtrace-prod.conf.template
+  amiary_prod_conf:
+    file: ./sites/amiary-prod.conf.template
+  amiary_canary_conf:
+    file: ./sites/amiary-canary.conf.template
+  amiary_common_proxy_conf:
+    file: ./sites/amiary-common-proxy.conf
 
 services:
   nginx:
@@ -43,6 +49,10 @@ services:
       OPENPANEL_OAUTH2_PROXY_UPSTREAM: ${OPENPANEL_OAUTH2_PROXY_UPSTREAM:-http://openpanel-oauth2-proxy:4180}
       RUNTRACE_PROD_SERVER_NAME: ${RUNTRACE_PROD_SERVER_NAME:-runtrace.localhost}
       RUNTRACE_PROD_UPSTREAM: ${RUNTRACE_PROD_UPSTREAM:-http://runtrace-prod-app:8080}
+      AMIARY_PROD_SERVER_NAME: ${AMIARY_PROD_SERVER_NAME:-amiary.localhost}
+      AMIARY_CANARY_SERVER_NAME: ${AMIARY_CANARY_SERVER_NAME:-canary.amiary.localhost}
+      AMIARY_PROD_UPSTREAM: ${AMIARY_PROD_UPSTREAM:-http://amiary-prod-app:8080}
+      AMIARY_CANARY_UPSTREAM: ${AMIARY_CANARY_UPSTREAM:-http://amiary-canary-app:8080}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
@@ -59,6 +69,10 @@ services:
       OPENPANEL_TLS_KEY_FILE: ${OPENPANEL_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       RUNTRACE_TLS_CERT_FILE: ${RUNTRACE_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       RUNTRACE_TLS_KEY_FILE: ${RUNTRACE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      AMIARY_PROD_TLS_CERT_FILE: ${AMIARY_PROD_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      AMIARY_PROD_TLS_KEY_FILE: ${AMIARY_PROD_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      AMIARY_CANARY_TLS_CERT_FILE: ${AMIARY_CANARY_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      AMIARY_CANARY_TLS_KEY_FILE: ${AMIARY_CANARY_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
       - source: common_conf
@@ -81,6 +95,12 @@ services:
         target: /etc/nginx/templates/openpanel-prod.conf.template
       - source: runtrace_prod_conf
         target: /etc/nginx/templates/runtrace-prod.conf.template
+      - source: amiary_prod_conf
+        target: /etc/nginx/templates/amiary-prod.conf.template
+      - source: amiary_canary_conf
+        target: /etc/nginx/templates/amiary-canary.conf.template
+      - source: amiary_common_proxy_conf
+        target: /etc/nginx/snippets/amiary-common-proxy.conf
     networks:
       - prod_app
       - canary_app
@@ -91,6 +111,8 @@ services:
       - evidella_prod_app
       - openpanel_prod_app
       - runtrace_prod_app
+      - amiary_prod_app
+      - amiary_canary_app
 
 networks:
   prod_app:
@@ -102,3 +124,5 @@ networks:
   evidella_prod_app:
   openpanel_prod_app:
   runtrace_prod_app:
+  amiary_prod_app:
+  amiary_canary_app:

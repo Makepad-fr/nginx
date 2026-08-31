@@ -17,8 +17,27 @@ log_format runtrace_json escape=json '{'
     '"upstream_response_time_seconds":"$upstream_response_time"'
     '}';
 
+# Amiary intentionally omits URI, query string, client IP, headers, bodies,
+# account identifiers, and contact identifiers from access logs.
+log_format amiary_json escape=json '{'
+    '"timestamp":"$time_iso8601",'
+    '"request_id":"$request_id",'
+    '"method":"$request_method",'
+    '"status":"$status",'
+    '"request_bytes":"$request_length",'
+    '"response_bytes":"$body_bytes_sent",'
+    '"request_time_seconds":"$request_time",'
+    '"upstream_status":"$upstream_status",'
+    '"upstream_response_time_seconds":"$upstream_response_time"'
+    '}';
+
 # Runtrace has a dedicated fleet-ingest budget so agent bursts cannot starve
 # administrator and public product traffic on the shared proxy.
 limit_req_zone $binary_remote_addr zone=runtrace_general:10m rate=30r/s;
 limit_req_zone $binary_remote_addr zone=runtrace_telemetry:10m rate=2r/s;
 limit_conn_zone $binary_remote_addr zone=runtrace_connections:10m;
+
+limit_req_zone $binary_remote_addr zone=amiary_general:10m rate=30r/s;
+limit_req_zone $binary_remote_addr zone=amiary_carddav:10m rate=15r/s;
+limit_req_zone $binary_remote_addr zone=amiary_media:10m rate=2r/s;
+limit_conn_zone $binary_remote_addr zone=amiary_connections:10m;

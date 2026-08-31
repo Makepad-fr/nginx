@@ -13,6 +13,7 @@ This repository owns the shared proxy stack for application VMs. Application rep
 - `sites/vif-prod.conf.template`: Vif virtual host template
 - `sites/makepad-landing-prod.conf.template`: Makepad landing site virtual host template
 - `sites/runtrace-prod.conf.template`: Runtrace virtual host template for `runtrace.co`
+- `sites/amiary-*.conf.template`: privacy-safe Amiary API and CardDAV virtual hosts
 - `sites/evidella-prod.conf.template`: Evidella landing site virtual host template
 - `sites/openpanel-prod.conf.template`: OpenPanel analytics virtual host template
 - `envs/production/compose.yml`: production Swarm overrides
@@ -31,6 +32,15 @@ The proxy joins shared external overlay networks:
 - `${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}`
 - `${MAKEPAD_PROXY_OPENPANEL_APP_NETWORK}`
 - `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`
+- `${MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK}`
+- `${MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK}`
+
+The two Amiary networks carry bearer and CardDAV Basic credentials between
+proxy and API nodes. The deploy workflow creates them with Swarm data-plane
+encryption (`--opt encrypted`) and rejects an existing network unless its
+driver, scope, and encryption option match. Recreate a mismatched network in a
+reviewed maintenance window; the workflow never silently reuses plaintext
+VXLAN for Amiary.
 
 Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`. `makepad.fr` proxies to `MAKEPAD_LANDING_PROD_UPSTREAM`, which defaults to `http://makepad-landing-prod-app:8080`; `www.makepad.fr` redirects permanently to `makepad.fr`. `evidella.com` proxies to `EVIDELLA_PROD_UPSTREAM`, which defaults to `http://opsbrainlanding-prod-app:8080`; `www.evidella.com` redirects permanently to `evidella.com`.
 `runtrace.co` proxies to `RUNTRACE_PROD_UPSTREAM`, which defaults to `http://runtrace-prod-app:8080`; the Runtrace app stack must attach to the same network value as `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`.
@@ -55,6 +65,7 @@ Required environment secrets:
 - `DEPLOY_SSH_PORT`
 - `DEPLOY_SSH_USER`
 - `DEPLOY_SSH_PRIVATE_KEY`
+- `DEPLOY_SSH_KNOWN_HOSTS`
 - `DEPLOY_REMOTE_DIR`
 - `DEPLOY_STACK_NAME`
 - `MAKEPAD_PROXY_PROD_APP_NETWORK`
@@ -65,6 +76,8 @@ Required environment secrets:
 - `MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK`
 - `MAKEPAD_PROXY_EVIDELLA_APP_NETWORK`
 - `MAKEPAD_PROXY_OPENPANEL_APP_NETWORK`
+- `MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK` (defaults to `makepad_amiary_prod_app`)
+- `MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK` (defaults to `makepad_amiary_canary_app`)
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
 `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is optional and defaults to `makepad_runtrace_prod_app`, matching the Runtrace app deployment template; set it only if the Runtrace app stack uses a different overlay network name.
@@ -96,3 +109,10 @@ For `runtrace.co`, the production proxy expects:
 - `/etc/letsencrypt/live/runtrace.co/privkey.pem`
 
 The `runtrace.co` DNS record must point to the proxy VM before issuing the certificate or deploying the HTTPS route.
+
+For Amiary development and TestFlight, provision separate certificates after DNS points to the proxy VM:
+
+- `/etc/letsencrypt/live/amiary.makepad.fr/{fullchain.pem,privkey.pem}`
+- `/etc/letsencrypt/live/canary.amiary.makepad.fr/{fullchain.pem,privkey.pem}`
+
+Amiary access logs intentionally exclude URLs, query strings, client IP addresses, headers, bodies, account identifiers, and contact identifiers. `scripts/test-amiary-policy.sh` validates the required limits and privacy properties before deployment.

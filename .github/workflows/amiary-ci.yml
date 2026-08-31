@@ -1,0 +1,54 @@
+name: Amiary proxy CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/amiary-ci.yml"
+      - ".github/workflows/manual-deploy.yml"
+      - "compose.yml"
+      - "envs/production/.env.proxy"
+      - "envs/production/compose.yml"
+      - "sites/00-common.conf.template"
+      - "sites/amiary-*.conf*"
+      - "scripts/test-amiary-policy.sh"
+      - "README.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amiary-proxy-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy-and-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      MAKEPAD_PROXY_PROD_APP_NETWORK: test_prod
+      MAKEPAD_PROXY_CANARY_APP_NETWORK: test_canary
+      MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK: test_alerteconso
+      MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK: test_le_petit_coin
+      MAKEPAD_PROXY_VIF_APP_NETWORK: test_vif
+      MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK: test_makepad_landing
+      MAKEPAD_PROXY_EVIDELLA_APP_NETWORK: test_evidella
+      MAKEPAD_PROXY_OPENPANEL_APP_NETWORK: test_openpanel
+      MAKEPAD_PROXY_RUNTRACE_APP_NETWORK: test_runtrace
+      MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK: test_amiary_prod
+      MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK: test_amiary_canary
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Check shell scripts
+        run: shellcheck scripts/test-amiary-policy.sh
+      - name: Validate Amiary privacy policy
+        run: scripts/test-amiary-policy.sh
+      - name: Render production stack
+        run: >-
+          docker compose
+          --env-file envs/production/.env.proxy
+          -f compose.yml
+          -f envs/production/compose.yml
+          config >/dev/null

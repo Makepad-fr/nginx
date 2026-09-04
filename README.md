@@ -60,7 +60,11 @@ docker node update --label-add infra.makepad.proxy=true <proxy-node>
 
 ## Deployment
 
-The deploy workflow runs automatically on pushes to `main` that change the proxy Compose files, production environment, site templates, or the deploy workflow itself. It can also be run manually from GitHub Actions.
+The deploy workflow is manual and accepts only the exact commit selected from
+protected `main`. It runs in the repository-restricted `Nginx Deploy`
+organization runner group on a dedicated self-hosted runner; ordinary CI uses
+the separate `Nginx CI` group and never receives deployment credentials. Keep
+both groups restricted to this repository and their protected workflow paths.
 
 Required environment secrets:
 

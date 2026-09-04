@@ -11,6 +11,7 @@ permissions:
 jobs:
   validate:
     name: policy-and-render
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, makepad]
     steps:
       - uses: actions/checkout@v5

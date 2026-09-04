@@ -38,6 +38,30 @@ for expected in \
     echo "Brio deployment TLS preflight is missing: ${expected}" >&2
     exit 1
   }
+  done
+
+for expected in \
+  'nginx-deploy-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' \
+  'nginx-deploy-bundle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' \
+  'UserKnownHostsFile=${known_hosts_file}' \
+  '-F /dev/null' \
+  'GlobalKnownHostsFile=/dev/null' \
+  'IdentitiesOnly=yes' \
+  'Remove job-scoped deployment material' \
+  'if: always()'; do
+  grep -Fq -- "${expected}" "${repo_root}/.github/workflows/manual-deploy.yml" || {
+    echo "Self-hosted Nginx deploy cleanup control is missing: ${expected}" >&2
+    exit 1
+  }
+done
+
+# These are literal workflow patterns, not shell paths.
+# shellcheck disable=SC2088
+for forbidden in '${HOME}/.ssh' '$HOME/.ssh' '~/.ssh' 'add-ssh-host-key-action'; do
+  if grep -Fq -- "${forbidden}" "${repo_root}/.github/workflows/manual-deploy.yml"; then
+    echo "Self-hosted Nginx deploy workflow persists SSH state via ${forbidden}." >&2
+    exit 1
+  fi
 done
 
 grep -Fq -- 'test: ["CMD", "nginx", "-t"]' "${repo_root}/compose.yml" || {

@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, makepad]
     environment: production
     permissions:
       contents: read
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Configure SSH key
+      - name: Configure job-scoped SSH material
         shell: bash
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -26,12 +26,16 @@ jobs:
           set -euo pipefail
           : "${DEPLOY_SSH_PRIVATE_KEY:?set DEPLOY_SSH_PRIVATE_KEY}"
           : "${DEPLOY_SSH_KNOWN_HOSTS:?set DEPLOY_SSH_KNOWN_HOSTS}"
-          mkdir -p "${HOME}/.ssh"
-          chmod 700 "${HOME}/.ssh"
-          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/id_ed25519"
-          chmod 600 "${HOME}/.ssh/id_ed25519"
-          printf '%s\n' "${DEPLOY_SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
-          chmod 600 "${HOME}/.ssh/known_hosts"
+          ssh_directory="${RUNNER_TEMP}/nginx-deploy-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [[ -e "${ssh_directory}" ]]; then
+            echo "Refusing to reuse an existing job-scoped SSH directory: ${ssh_directory}" >&2
+            exit 1
+          fi
+          mkdir -m 0700 "${ssh_directory}"
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${ssh_directory}/id_ed25519"
+          chmod 0600 "${ssh_directory}/id_ed25519"
+          printf '%s\n' "${DEPLOY_SSH_KNOWN_HOSTS}" > "${ssh_directory}/known_hosts"
+          chmod 0600 "${ssh_directory}/known_hosts"
 
       - name: Validate Runtrace proxy policy
         shell: bash
@@ -81,7 +85,11 @@ jobs:
             exit 1
           fi
 
-          bundle_root="${RUNNER_TEMP}/bundle"
+          bundle_root="${RUNNER_TEMP}/nginx-deploy-bundle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if [[ -e "${bundle_root}" ]]; then
+            echo "Refusing to reuse an existing job-scoped deployment bundle: ${bundle_root}" >&2
+            exit 1
+          fi
           mkdir -p "${bundle_root}/envs/production" "${bundle_root}/sites"
           cp compose.yml "${bundle_root}/compose.yml"
           cp "envs/production/compose.yml" "${bundle_root}/envs/production/compose.yml"
@@ -127,10 +135,17 @@ jobs:
             echo "DEPLOY_SSH_USER must not be root." >&2
             exit 1
           fi
-          bundle_root="${RUNNER_TEMP}/bundle"
+          bundle_root="${RUNNER_TEMP}/nginx-deploy-bundle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh_directory="${RUNNER_TEMP}/nginx-deploy-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          private_key_file="${ssh_directory}/id_ed25519"
+          known_hosts_file="${ssh_directory}/known_hosts"
+          [[ -r "${private_key_file}" && -r "${known_hosts_file}" ]] || {
+            echo "Job-scoped SSH material is missing or unreadable." >&2
+            exit 1
+          }
           remote_port=${REMOTE_PORT:-22}
-          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" -p "${remote_port}")
-          scp_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" -P "${remote_port}")
+          ssh_opts=(-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=${known_hosts_file}" -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i "${private_key_file}" -p "${remote_port}")
+          scp_opts=(-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=${known_hosts_file}" -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i "${private_key_file}" -P "${remote_port}")
           remote_target="${REMOTE_USER}@${REMOTE_HOST}"
 
           ssh "${ssh_opts[@]}" "${remote_target}" mkdir -p "${REMOTE_DIR}/envs/production" "${REMOTE_DIR}/sites"
@@ -355,3 +370,17 @@ jobs:
           wait_for_status "https://${brio_host}/livez" 204 "Brio live ingress"
           wait_for_status "https://${maildev_host}/" 302 "MailDev OAuth gate"
           EOF
+
+      - name: Remove job-scoped deployment material
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in \
+            "${RUNNER_TEMP}/nginx-deploy-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            "${RUNNER_TEMP}/nginx-deploy-bundle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
+            case "${path}" in
+              "${RUNNER_TEMP}"/nginx-deploy-*) rm -rf -- "${path}" ;;
+              *) echo "Refusing to remove unexpected cleanup path: ${path}" >&2; exit 1 ;;
+            esac
+          done

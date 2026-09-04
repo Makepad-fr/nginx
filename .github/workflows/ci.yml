@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    name: policy-and-render
+    runs-on: [self-hosted, linux, x64, makepad]
     steps:
       - uses: actions/checkout@v5
       - name: Check shell scripts

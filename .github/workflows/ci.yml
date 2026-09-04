@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check shell scripts
+        run: shellcheck --severity=warning scripts/*.sh
+      - name: Validate existing Runtrace proxy policy
+        run: ./scripts/test-runtrace-upload-policy.sh
+      - name: Validate Brio staging proxy policy
+        run: ./scripts/test-brio-staging-policy.sh

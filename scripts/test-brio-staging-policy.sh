@@ -55,12 +55,32 @@ for expected in \
   'Remove job-scoped deployment material' \
   'if: always()' \
   "if: github.repository == 'Makepad-fr/nginx' && github.ref == 'refs/heads/main'" \
+  'REMOTE_HOST: ${{ vars.NGINX_DEPLOY_HOST }}' \
+  'REMOTE_PORT: ${{ vars.NGINX_DEPLOY_PORT }}' \
+  'REMOTE_USER: ${{ vars.NGINX_DEPLOY_USER }}' \
+  'REMOTE_DIR: ${{ vars.NGINX_DEPLOY_REMOTE_DIR }}' \
+  'STACK_NAME: ${{ vars.NGINX_DEPLOY_STACK_NAME }}' \
+  '"${REMOTE_HOST}" != "135.181.141.31"' \
+  '"${REMOTE_DIR}" != "/srv/makepad/nginx"' \
+  '"${STACK_NAME}" != "makepad-edge"' \
   'ref: ${{ github.sha }}' \
   '[[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]'; do
   grep -Fq -- "${expected}" "${repo_root}/.github/workflows/manual-deploy.yml" || {
     echo "Self-hosted Nginx deploy cleanup control is missing: ${expected}" >&2
     exit 1
   }
+done
+
+for forbidden_target_secret in \
+  'secrets.DEPLOY_SSH_HOST' \
+  'secrets.DEPLOY_SSH_PORT' \
+  'secrets.DEPLOY_SSH_USER' \
+  'secrets.DEPLOY_REMOTE_DIR' \
+  'secrets.DEPLOY_STACK_NAME'; do
+  if grep -Fq -- "${forbidden_target_secret}" "${repo_root}/.github/workflows/manual-deploy.yml"; then
+    echo "Non-secret Nginx deployment coordinates must use protected environment variables: ${forbidden_target_secret}" >&2
+    exit 1
+  fi
 done
 
 if grep -Eq -- '--opt[[:space:]]+encrypted([[:space:]]|\))' "${repo_root}/.github/workflows/manual-deploy.yml"; then

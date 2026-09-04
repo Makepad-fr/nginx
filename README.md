@@ -68,12 +68,8 @@ both groups restricted to this repository and their protected workflow paths.
 
 Required environment secrets:
 
-- `DEPLOY_SSH_HOST`
-- `DEPLOY_SSH_PORT`
-- `DEPLOY_SSH_USER`
 - `DEPLOY_SSH_PRIVATE_KEY`
-- `DEPLOY_REMOTE_DIR`
-- `DEPLOY_STACK_NAME`
+- `DEPLOY_SSH_KNOWN_HOSTS`
 - `MAKEPAD_PROXY_PROD_APP_NETWORK`
 - `MAKEPAD_PROXY_CANARY_APP_NETWORK`
 - `MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK`
@@ -84,7 +80,20 @@ Required environment secrets:
 - `MAKEPAD_PROXY_OPENPANEL_APP_NETWORK`
 - `MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK`
 - `MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK`
-- `DEPLOY_SSH_KNOWN_HOSTS`
+
+Required protected `production` environment variables are pinned by both the
+workflow and the environment configuration:
+
+- `NGINX_DEPLOY_HOST=135.181.141.31`
+- `NGINX_DEPLOY_PORT=22`
+- `NGINX_DEPLOY_USER=makepad`
+- `NGINX_DEPLOY_REMOTE_DIR=/srv/makepad/nginx`
+- `NGINX_DEPLOY_STACK_NAME=makepad-edge`
+
+Keep the SSH key and host-key record in Proton Pass and mirror them only to the
+protected GitHub environment. Keep the non-secret target coordinates in the
+same Proton Pass server item and GitHub environment variables. The workflow
+rejects any target drift before opening an SSH connection.
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
 `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is optional and defaults to `makepad_runtrace_prod_app`, matching the Runtrace app deployment template; set it only if the Runtrace app stack uses a different overlay network name.

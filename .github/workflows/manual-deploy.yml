@@ -138,16 +138,20 @@ jobs:
       - name: Deploy via Docker Swarm
         shell: bash
         env:
-          REMOTE_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
-          REMOTE_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
-          REMOTE_USER: ${{ secrets.DEPLOY_SSH_USER }}
-          REMOTE_DIR: ${{ secrets.DEPLOY_REMOTE_DIR }}
-          STACK_NAME: ${{ secrets.DEPLOY_STACK_NAME }}
+          REMOTE_HOST: ${{ vars.NGINX_DEPLOY_HOST }}
+          REMOTE_PORT: ${{ vars.NGINX_DEPLOY_PORT }}
+          REMOTE_USER: ${{ vars.NGINX_DEPLOY_USER }}
+          REMOTE_DIR: ${{ vars.NGINX_DEPLOY_REMOTE_DIR }}
+          STACK_NAME: ${{ vars.NGINX_DEPLOY_STACK_NAME }}
         run: |
           set -euo pipefail
-          : "${REMOTE_HOST:?}" "${REMOTE_USER:?}" "${REMOTE_DIR:?}" "${STACK_NAME:?}"
-          if [[ "${REMOTE_USER}" == "root" ]]; then
-            echo "DEPLOY_SSH_USER must not be root." >&2
+          : "${REMOTE_HOST:?}" "${REMOTE_PORT:?}" "${REMOTE_USER:?}" "${REMOTE_DIR:?}" "${STACK_NAME:?}"
+          if [[ "${REMOTE_HOST}" != "135.181.141.31" || \
+                "${REMOTE_PORT}" != "22" || \
+                "${REMOTE_USER}" != "makepad" || \
+                "${REMOTE_DIR}" != "/srv/makepad/nginx" || \
+                "${STACK_NAME}" != "makepad-edge" ]]; then
+            echo "Nginx deployment target does not match the pinned production host." >&2
             exit 1
           fi
           bundle_root="${RUNNER_TEMP}/nginx-deploy-bundle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
@@ -158,7 +162,7 @@ jobs:
             echo "Job-scoped SSH material is missing or unreadable." >&2
             exit 1
           }
-          remote_port=${REMOTE_PORT:-22}
+          remote_port=${REMOTE_PORT}
           ssh_opts=(-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=${known_hosts_file}" -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i "${private_key_file}" -p "${remote_port}")
           scp_opts=(-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=${known_hosts_file}" -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i "${private_key_file}" -P "${remote_port}")
           remote_target="${REMOTE_USER}@${REMOTE_HOST}"

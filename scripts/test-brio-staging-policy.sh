@@ -64,6 +64,17 @@ for forbidden in '${HOME}/.ssh' '$HOME/.ssh' '~/.ssh' 'add-ssh-host-key-action';
   fi
 done
 
+for workflow in \
+  "${repo_root}/.github/workflows/ci.yml" \
+  "${repo_root}/.github/workflows/manual-deploy.yml"; do
+  checkout_count=$(grep -Fc -- 'uses: actions/checkout@v5' "${workflow}")
+  credential_count=$(grep -Fc -- 'persist-credentials: false' "${workflow}")
+  if [[ "${checkout_count}" -eq 0 || "${credential_count}" -ne "${checkout_count}" ]]; then
+    echo "Every self-hosted Nginx checkout must disable persisted Git credentials: ${workflow}" >&2
+    exit 1
+  fi
+done
+
 grep -Fq -- 'test: ["CMD", "nginx", "-t"]' "${repo_root}/compose.yml" || {
   echo "Nginx service is missing its configuration healthcheck." >&2
   exit 1

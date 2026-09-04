@@ -14,6 +14,8 @@ jobs:
     runs-on: [self-hosted, linux, x64, makepad]
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Check shell scripts
         run: shellcheck --severity=warning scripts/*.sh
       - name: Validate existing Runtrace proxy policy

@@ -19,10 +19,20 @@ configs:
     file: ./sites/openpanel-prod.conf.template
   runtrace_prod_conf:
     file: ./sites/runtrace-prod.conf.template
+  brio_staging_conf:
+    file: ./sites/brio-staging.conf.template
+  maildev_brio_staging_conf:
+    file: ./sites/maildev-brio-staging.conf.template
 
 services:
   nginx:
     image: nginx:1.30-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       CATWLK_PROD_SERVER_NAME: ${CATWLK_PROD_SERVER_NAME:-localhost}
       CATWLK_CANARY_SERVER_NAME: ${CATWLK_CANARY_SERVER_NAME:-canary.localhost}
@@ -43,6 +53,11 @@ services:
       OPENPANEL_OAUTH2_PROXY_UPSTREAM: ${OPENPANEL_OAUTH2_PROXY_UPSTREAM:-http://openpanel-oauth2-proxy:4180}
       RUNTRACE_PROD_SERVER_NAME: ${RUNTRACE_PROD_SERVER_NAME:-runtrace.localhost}
       RUNTRACE_PROD_UPSTREAM: ${RUNTRACE_PROD_UPSTREAM:-http://runtrace-prod-app:8080}
+      BRIO_STAGING_SERVER_NAME: ${BRIO_STAGING_SERVER_NAME:-brio-staging.localhost}
+      BRIO_STAGING_UPSTREAM: ${BRIO_STAGING_UPSTREAM:-http://brio-staging-app:8080}
+      MAILDEV_BRIO_STAGING_SERVER_NAME: ${MAILDEV_BRIO_STAGING_SERVER_NAME:-maildev-brio-staging.localhost}
+      MAILDEV_BRIO_STAGING_UPSTREAM: ${MAILDEV_BRIO_STAGING_UPSTREAM:-http://maildev-brio-staging:1080}
+      MAILDEV_BRIO_STAGING_AUTH_UPSTREAM: ${MAILDEV_BRIO_STAGING_AUTH_UPSTREAM:-http://maildev-brio-staging-auth:4180}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
@@ -59,6 +74,10 @@ services:
       OPENPANEL_TLS_KEY_FILE: ${OPENPANEL_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       RUNTRACE_TLS_CERT_FILE: ${RUNTRACE_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       RUNTRACE_TLS_KEY_FILE: ${RUNTRACE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      BRIO_STAGING_TLS_CERT_FILE: ${BRIO_STAGING_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      BRIO_STAGING_TLS_KEY_FILE: ${BRIO_STAGING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      MAILDEV_BRIO_STAGING_TLS_CERT_FILE: ${MAILDEV_BRIO_STAGING_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      MAILDEV_BRIO_STAGING_TLS_KEY_FILE: ${MAILDEV_BRIO_STAGING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
       - source: common_conf
@@ -81,6 +100,10 @@ services:
         target: /etc/nginx/templates/openpanel-prod.conf.template
       - source: runtrace_prod_conf
         target: /etc/nginx/templates/runtrace-prod.conf.template
+      - source: brio_staging_conf
+        target: /etc/nginx/templates/brio-staging.conf.template
+      - source: maildev_brio_staging_conf
+        target: /etc/nginx/templates/maildev-brio-staging.conf.template
     networks:
       - prod_app
       - canary_app
@@ -91,6 +114,8 @@ services:
       - evidella_prod_app
       - openpanel_prod_app
       - runtrace_prod_app
+      - brio_staging_app
+      - maildev_brio_staging_web
 
 networks:
   prod_app:
@@ -102,3 +127,5 @@ networks:
   evidella_prod_app:
   openpanel_prod_app:
   runtrace_prod_app:
+  brio_staging_app:
+  maildev_brio_staging_web:

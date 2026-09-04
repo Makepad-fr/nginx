@@ -19,16 +19,25 @@ jobs:
 
       - name: Configure SSH key
         shell: bash
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
+          : "${DEPLOY_SSH_PRIVATE_KEY:?set DEPLOY_SSH_PRIVATE_KEY}"
+          : "${DEPLOY_SSH_KNOWN_HOSTS:?set DEPLOY_SSH_KNOWN_HOSTS}"
           mkdir -p "${HOME}/.ssh"
           chmod 700 "${HOME}/.ssh"
-          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > "${HOME}/.ssh/id_ed25519"
+          printf '%s\n' "${DEPLOY_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/id_ed25519"
           chmod 600 "${HOME}/.ssh/id_ed25519"
+          printf '%s\n' "${DEPLOY_SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 600 "${HOME}/.ssh/known_hosts"
 
       - name: Validate Runtrace proxy policy
         shell: bash
-        run: scripts/test-runtrace-upload-policy.sh
+        run: |
+          scripts/test-runtrace-upload-policy.sh
+          scripts/test-brio-staging-policy.sh
 
       - name: Prepare deployment bundle
         shell: bash
@@ -42,6 +51,8 @@ jobs:
           MAKEPAD_PROXY_EVIDELLA_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_EVIDELLA_APP_NETWORK }}
           MAKEPAD_PROXY_OPENPANEL_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_OPENPANEL_APP_NETWORK }}
           MAKEPAD_PROXY_RUNTRACE_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_RUNTRACE_APP_NETWORK || 'makepad_runtrace_prod_app' }}
+          MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK: ${{ secrets.MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK }}
+          MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK: ${{ secrets.MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK }}
         run: |
           set -euo pipefail
           for required_network in \
@@ -59,6 +70,16 @@ jobs:
               exit 1
             fi
           done
+          : "${MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK:?missing required production secret: MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK}"
+          : "${MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK:?missing required production secret: MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK}"
+          if [[ "${MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK}" != "makepad_brio_staging_app" ]]; then
+            echo "::error::MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK must be makepad_brio_staging_app" >&2
+            exit 1
+          fi
+          if [[ "${MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK}" != "makepad_brio_staging_maildev_web" ]]; then
+            echo "::error::MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK must be makepad_brio_staging_maildev_web" >&2
+            exit 1
+          fi
 
           bundle_root="${RUNNER_TEMP}/bundle"
           mkdir -p "${bundle_root}/envs/production" "${bundle_root}/sites"
@@ -75,6 +96,8 @@ jobs:
           cp sites/evidella-prod.conf.template "${bundle_root}/sites/evidella-prod.conf.template"
           cp sites/openpanel-prod.conf.template "${bundle_root}/sites/openpanel-prod.conf.template"
           cp sites/runtrace-prod.conf.template "${bundle_root}/sites/runtrace-prod.conf.template"
+          cp sites/brio-staging.conf.template "${bundle_root}/sites/brio-staging.conf.template"
+          cp sites/maildev-brio-staging.conf.template "${bundle_root}/sites/maildev-brio-staging.conf.template"
           {
             echo "MAKEPAD_PROXY_PROD_APP_NETWORK=${MAKEPAD_PROXY_PROD_APP_NETWORK}"
             echo "MAKEPAD_PROXY_CANARY_APP_NETWORK=${MAKEPAD_PROXY_CANARY_APP_NETWORK}"
@@ -85,6 +108,8 @@ jobs:
             echo "MAKEPAD_PROXY_EVIDELLA_APP_NETWORK=${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}"
             echo "MAKEPAD_PROXY_OPENPANEL_APP_NETWORK=${MAKEPAD_PROXY_OPENPANEL_APP_NETWORK}"
             echo "MAKEPAD_PROXY_RUNTRACE_APP_NETWORK=${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}"
+            echo "MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK=${MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK}"
+            echo "MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK=${MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK}"
           } > "${bundle_root}/envs/production/.env.deploy"
 
       - name: Deploy via Docker Swarm
@@ -104,8 +129,8 @@ jobs:
           fi
           bundle_root="${RUNNER_TEMP}/bundle"
           remote_port=${REMOTE_PORT:-22}
-          ssh_opts=(-o StrictHostKeyChecking=accept-new -p "${remote_port}")
-          scp_opts=(-o StrictHostKeyChecking=accept-new -P "${remote_port}")
+          ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" -p "${remote_port}")
+          scp_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" -P "${remote_port}")
           remote_target="${REMOTE_USER}@${REMOTE_HOST}"
 
           ssh "${ssh_opts[@]}" "${remote_target}" mkdir -p "${REMOTE_DIR}/envs/production" "${REMOTE_DIR}/sites"
@@ -123,6 +148,8 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/evidella-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/evidella-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/openpanel-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/openpanel-prod.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/runtrace-prod.conf.template" "${remote_target}:${REMOTE_DIR}/sites/runtrace-prod.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/brio-staging.conf.template" "${remote_target}:${REMOTE_DIR}/sites/brio-staging.conf.template"
+          scp "${scp_opts[@]}" "${bundle_root}/sites/maildev-brio-staging.conf.template" "${remote_target}:${REMOTE_DIR}/sites/maildev-brio-staging.conf.template"
 
           ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" <<'EOF'
           set -euo pipefail
@@ -130,6 +157,74 @@ jobs:
           stack_name=$2
           deploy_env=production
           env_deploy="${remote_dir}/envs/${deploy_env}/.env.deploy"
+          env_proxy="${remote_dir}/envs/${deploy_env}/.env.proxy"
+
+          proxy_setting() {
+            grep "^$1=" "${env_proxy}" | tail -n 1 | cut -d= -f2-
+          }
+
+          validate_brio_certificate() {
+            local host=$1
+            local certificate=$2
+            if [[ ! -r "${certificate}" ]]; then
+              echo "Brio TLS certificate is missing or unreadable: ${certificate}" >&2
+              exit 1
+            fi
+            if ! openssl x509 -in "${certificate}" -noout -checkhost "${host}" >/dev/null; then
+              echo "Brio TLS certificate does not cover ${host}: ${certificate}" >&2
+              exit 1
+            fi
+            if ! openssl x509 -in "${certificate}" -noout -checkend 604800 >/dev/null; then
+              echo "Brio TLS certificate expires in less than seven days: ${certificate}" >&2
+              exit 1
+            fi
+            if ! openssl verify -purpose sslserver -verify_hostname "${host}" -untrusted "${certificate}" "${certificate}" >/dev/null; then
+              echo "Brio TLS certificate is not currently valid or does not chain to the host trust store: ${certificate}" >&2
+              exit 1
+            fi
+          }
+
+          command -v openssl >/dev/null 2>&1 || {
+            echo "openssl is required for the Brio TLS preflight." >&2
+            exit 1
+          }
+          command -v curl >/dev/null 2>&1 || {
+            echo "curl is required for the Brio live ingress probes." >&2
+            exit 1
+          }
+          brio_host=$(proxy_setting BRIO_STAGING_SERVER_NAME)
+          brio_certificate=$(proxy_setting BRIO_STAGING_TLS_CERT_FILE)
+          maildev_host=$(proxy_setting MAILDEV_BRIO_STAGING_SERVER_NAME)
+          maildev_certificate=$(proxy_setting MAILDEV_BRIO_STAGING_TLS_CERT_FILE)
+          : "${brio_host:?missing BRIO_STAGING_SERVER_NAME}" \
+            "${brio_certificate:?missing BRIO_STAGING_TLS_CERT_FILE}" \
+            "${maildev_host:?missing MAILDEV_BRIO_STAGING_SERVER_NAME}" \
+            "${maildev_certificate:?missing MAILDEV_BRIO_STAGING_TLS_CERT_FILE}"
+          validate_brio_certificate "${brio_host}" "${brio_certificate}"
+          validate_brio_certificate "${maildev_host}" "${maildev_certificate}"
+
+          # Render only the two new virtual hosts before touching the shared
+          # stack. nginx -t also proves that each configured private key is
+          # readable and matches its certificate.
+          nginx_image=$(awk '$1 == "image:" { print $2; exit }' "${remote_dir}/compose.yml")
+          letsencrypt_root=$(proxy_setting CATWLK_PROXY_LETSENCRYPT_HOST_PATH)
+          acme_root=$(proxy_setting CATWLK_PROXY_ACME_WEBROOT_HOST_PATH)
+          : "${nginx_image:?unable to resolve the pinned Nginx image}" \
+            "${letsencrypt_root:?missing CATWLK_PROXY_LETSENCRYPT_HOST_PATH}" \
+            "${acme_root:?missing CATWLK_PROXY_ACME_WEBROOT_HOST_PATH}"
+          preflight_templates=$(mktemp -d)
+          cleanup_preflight() { rm -rf "${preflight_templates}"; }
+          trap cleanup_preflight EXIT
+          cp "${remote_dir}/sites/00-common.conf.template" \
+            "${remote_dir}/sites/brio-staging.conf.template" \
+            "${remote_dir}/sites/maildev-brio-staging.conf.template" \
+            "${preflight_templates}/"
+          docker run --rm \
+            --env-file "${env_proxy}" \
+            --volume "${preflight_templates}:/etc/nginx/templates:ro" \
+            --volume "${letsencrypt_root}:/etc/letsencrypt:ro" \
+            --volume "${acme_root}:/var/lib/letsencrypt:ro" \
+            "${nginx_image}" nginx -t
           for app_network in \
             "$(grep '^MAKEPAD_PROXY_PROD_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
             "$(grep '^MAKEPAD_PROXY_CANARY_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)" \
@@ -143,6 +238,32 @@ jobs:
             docker network inspect "${app_network}" >/dev/null 2>&1 \
               || docker network create --driver overlay --attachable "${app_network}"
           done
+
+          ensure_brio_network() {
+            local network_name=$1
+            local internal=$2
+            if ! docker network inspect "${network_name}" >/dev/null 2>&1; then
+              create_args=(--driver overlay --attachable --opt encrypted)
+              if [[ "${internal}" == "true" ]]; then
+                create_args+=(--internal)
+              fi
+              docker network create "${create_args[@]}" "${network_name}" >/dev/null
+            fi
+            local details
+            details=$(docker network inspect "${network_name}" --format '{{.Driver}} {{.Scope}} {{.Internal}} {{.Attachable}} {{index .Options "encrypted"}}')
+            if [[ "${details}" != "overlay swarm ${internal} true true" ]]; then
+              echo "Brio network ${network_name} has unexpected isolation/encryption settings: ${details}" >&2
+              exit 1
+            fi
+          }
+          brio_app_network=$(grep '^MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)
+          brio_maildev_network=$(grep '^MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK=' "${env_deploy}" | tail -n 1 | cut -d= -f2-)
+          if [[ "${brio_app_network}" != "makepad_brio_staging_app" || "${brio_maildev_network}" != "makepad_brio_staging_maildev_web" ]]; then
+            echo "Brio deployment bundle contains non-canonical network names." >&2
+            exit 1
+          fi
+          ensure_brio_network "${brio_app_network}" false
+          ensure_brio_network "${brio_maildev_network}" true
 
           docker compose \
             --env-file "${remote_dir}/envs/${deploy_env}/.env.proxy" \
@@ -178,4 +299,59 @@ jobs:
           PY
 
           docker stack deploy --compose-file "${remote_dir}/stack.yml" "${stack_name}"
+
+          wait_for_nginx_convergence() {
+            local service_name="${stack_name}_nginx"
+            local expected_image="${nginx_image}"
+            local update_state desired running_snapshot running_count wrong_image
+            for attempt in $(seq 1 60); do
+              if ! docker service inspect "${service_name}" >/dev/null 2>&1; then
+                sleep 2
+                continue
+              fi
+              update_state=$(docker service inspect "${service_name}" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{else}}none{{end}}')
+              case "${update_state}" in
+                paused|rollback_started|rollback_paused|rollback_completed)
+                  echo "Nginx service update did not complete successfully: ${update_state}." >&2
+                  docker service ps --no-trunc "${service_name}" >&2
+                  return 1
+                  ;;
+                updating)
+                  sleep 2
+                  continue
+                  ;;
+              esac
+              desired=$(docker service inspect "${service_name}" --format '{{.Spec.Mode.Replicated.Replicas}}')
+              running_snapshot=$(docker service ps --no-trunc --filter desired-state=running --format '{{.Image}} {{.CurrentState}}' "${service_name}")
+              running_count=$(printf '%s\n' "${running_snapshot}" | awk '$2 == "Running" {count++} END {print count + 0}')
+              wrong_image=$(printf '%s\n' "${running_snapshot}" | awk -v expected="${expected_image}" '$2 == "Running" && $1 != expected {print $1; exit}')
+              if [[ "${running_count}" == "${desired}" && -z "${wrong_image}" && ( "${update_state}" == "completed" || "${update_state}" == "none" ) ]]; then
+                return 0
+              fi
+              sleep 2
+            done
+            echo "Nginx service did not converge to ${expected_image}." >&2
+            docker service ps --no-trunc "${service_name}" >&2 || true
+            return 1
+          }
+
+          wait_for_status() {
+            local url=$1
+            local expected_status=$2
+            local label=$3
+            local status
+            for attempt in $(seq 1 30); do
+              status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "${url}" || true)
+              if [[ "${status}" == "${expected_status}" ]]; then
+                return 0
+              fi
+              sleep 2
+            done
+            echo "${label} did not return HTTP ${expected_status} after Nginx converged." >&2
+            return 1
+          }
+
+          wait_for_nginx_convergence
+          wait_for_status "https://${brio_host}/livez" 204 "Brio live ingress"
+          wait_for_status "https://${maildev_host}/" 302 "MailDev OAuth gate"
           EOF

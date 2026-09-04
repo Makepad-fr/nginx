@@ -13,6 +13,8 @@ This repository owns the shared proxy stack for application VMs. Application rep
 - `sites/vif-prod.conf.template`: Vif virtual host template
 - `sites/makepad-landing-prod.conf.template`: Makepad landing site virtual host template
 - `sites/runtrace-prod.conf.template`: Runtrace virtual host template for `runtrace.co`
+- `sites/brio-staging.conf.template`: private Brio staging application host
+- `sites/maildev-brio-staging.conf.template`: maintainer-only Brio MailDev host
 - `sites/evidella-prod.conf.template`: Evidella landing site virtual host template
 - `sites/openpanel-prod.conf.template`: OpenPanel analytics virtual host template
 - `envs/production/compose.yml`: production Swarm overrides
@@ -31,9 +33,18 @@ The proxy joins shared external overlay networks:
 - `${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}`
 - `${MAKEPAD_PROXY_OPENPANEL_APP_NETWORK}`
 - `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`
+- `${MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK}`
+- `${MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK}`
 
 Each application stack attaches to its corresponding shared network and exposes a stable DNS alias there. `aupetitcoin.makepad.fr` proxies to `LE_PETIT_COIN_PROD_UPSTREAM`, which defaults to `http://le-petit-coin-backend:8080` to match the backend stack's production `LE_PETIT_COIN_BACKEND_ALIAS`. `makepad.fr` proxies to `MAKEPAD_LANDING_PROD_UPSTREAM`, which defaults to `http://makepad-landing-prod-app:8080`; `www.makepad.fr` redirects permanently to `makepad.fr`. `evidella.com` proxies to `EVIDELLA_PROD_UPSTREAM`, which defaults to `http://opsbrainlanding-prod-app:8080`; `www.evidella.com` redirects permanently to `evidella.com`.
 `runtrace.co` proxies to `RUNTRACE_PROD_UPSTREAM`, which defaults to `http://runtrace-prod-app:8080`; the Runtrace app stack must attach to the same network value as `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`.
+
+The Brio staging application uses an encrypted edge overlay shared only with
+Nginx; the MailDev UI uses a separate internal, encrypted overlay. MailDev is protected by the companion GitHub OAuth
+gate; every UI, API, and WebSocket request requires an allowlisted maintainer,
+and the relay endpoint is denied at the proxy. Both hosts use a privacy access
+log that omits paths, query strings, client addresses, referrers, and user-agent
+values. Run `scripts/test-brio-staging-policy.sh` before deployment.
 
 The Runtrace virtual host permits request bodies up to 64 MiB only on `POST /telemetry-batches`. Other Runtrace routes retain a 4 MiB proxy ceiling. Per-client request and connection budgets isolate fleet ingestion from normal administrator and public traffic; rejected excess traffic receives HTTP 429. Nginx generates one `X-Request-ID`, forwards it to Runtrace, and returns it on every response. The Runtrace access log is structured JSON with that ID, method, status, byte counts, and timing only; it intentionally excludes URLs, query strings, IP addresses, headers, bodies, and tenant identifiers. The production service also has CPU/memory reservations and limits plus bounded JSON logs. Before deployment, run `scripts/test-runtrace-upload-policy.sh`; it validates these controls, renders the production template, validates it with nginx, proves request-ID correlation and log privacy, and exercises the accepted and rejected upload boundaries through disposable containers.
 
@@ -65,6 +76,9 @@ Required environment secrets:
 - `MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK`
 - `MAKEPAD_PROXY_EVIDELLA_APP_NETWORK`
 - `MAKEPAD_PROXY_OPENPANEL_APP_NETWORK`
+- `MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK`
+- `MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK`
+- `DEPLOY_SSH_KNOWN_HOSTS`
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
 `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is optional and defaults to `makepad_runtrace_prod_app`, matching the Runtrace app deployment template; set it only if the Runtrace app stack uses a different overlay network name.
@@ -96,3 +110,19 @@ For `runtrace.co`, the production proxy expects:
 - `/etc/letsencrypt/live/runtrace.co/privkey.pem`
 
 The `runtrace.co` DNS record must point to the proxy VM before issuing the certificate or deploying the HTTPS route.
+
+For Brio staging, issue certificates only after the two public DNS records point
+to the proxy VM:
+
+- `/etc/letsencrypt/live/brio-staging.makepad.fr/{fullchain.pem,privkey.pem}`
+- `/etc/letsencrypt/live/maildev-brio-staging.makepad.fr/{fullchain.pem,privkey.pem}`
+
+Do not deploy the Brio routes until both certificates and both encrypted overlay
+networks exist. The network secrets must be exactly
+`makepad_brio_staging_app` and `makepad_brio_staging_maildev_web`; alternate
+values are rejected. The manual workflow fails before updating the shared stack
+unless both certificates cover their configured hostnames, remain valid for at
+least seven days, chain to the host trust store, and have matching private keys
+that Nginx can read. It then waits for the exact pinned Nginx image to converge
+and certificate-verifies live Brio and MailDev ingress. The Keycloak host is
+owned by the Keycloak ingress stack.

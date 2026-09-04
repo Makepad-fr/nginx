@@ -9,6 +9,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.repository == 'Makepad-fr/nginx' && github.ref == 'refs/heads/main'
     runs-on:
       group: org/Nginx Deploy
       labels: [self-hosted, linux, x64, makepad, makepad-nginx-deploy]
@@ -20,6 +21,16 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Bind deployment to protected main
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REPOSITORY}" == "Makepad-fr/nginx" ]]
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]]
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
 
       - name: Configure job-scoped SSH material
         shell: bash
@@ -170,10 +181,11 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/brio-staging.conf.template" "${remote_target}:${REMOTE_DIR}/sites/brio-staging.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/maildev-brio-staging.conf.template" "${remote_target}:${REMOTE_DIR}/sites/maildev-brio-staging.conf.template"
 
-          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" <<'EOF'
+          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" "${REMOTE_HOST}" <<'EOF'
           set -euo pipefail
           remote_dir=$1
           stack_name=$2
+          ingress_ip=$3
           deploy_env=production
           env_deploy="${remote_dir}/envs/${deploy_env}/.env.deploy"
           env_proxy="${remote_dir}/envs/${deploy_env}/.env.proxy"
@@ -211,6 +223,14 @@ jobs:
             echo "curl is required for the Brio live ingress probes." >&2
             exit 1
           }
+          python3 - "${ingress_ip}" <<'PY'
+          import ipaddress
+          import sys
+
+          value = ipaddress.ip_address(sys.argv[1])
+          if value.version != 4 or not value.is_global:
+              raise SystemExit("Nginx deployment host must be a globally routable IPv4 address")
+          PY
           brio_host=$(proxy_setting BRIO_STAGING_SERVER_NAME)
           brio_certificate=$(proxy_setting BRIO_STAGING_TLS_CERT_FILE)
           maildev_host=$(proxy_setting MAILDEV_BRIO_STAGING_SERVER_NAME)
@@ -232,7 +252,12 @@ jobs:
             "${letsencrypt_root:?missing CATWLK_PROXY_LETSENCRYPT_HOST_PATH}" \
             "${acme_root:?missing CATWLK_PROXY_ACME_WEBROOT_HOST_PATH}"
           preflight_templates=$(mktemp -d)
-          cleanup_preflight() { rm -rf "${preflight_templates}"; }
+          cleanup_preflight() {
+            if [[ -d "${preflight_templates}" && ! -L "${preflight_templates}" ]]; then
+              find "${preflight_templates}" -depth -mindepth 1 -delete
+              rmdir -- "${preflight_templates}"
+            fi
+          }
           trap cleanup_preflight EXIT
           cp "${remote_dir}/sites/00-common.conf.template" \
             "${remote_dir}/sites/brio-staging.conf.template" \
@@ -317,10 +342,56 @@ jobs:
           target.write_text(text)
           PY
 
+          nginx_service="${stack_name}_nginx"
+          prior_spec=$(mktemp)
+          if ! docker service inspect "${nginx_service}" --format '{{json .Spec}}' > "${prior_spec}"; then
+            echo "The existing shared Nginx service is required for rollback-safe deployment." >&2
+            exit 1
+          fi
+          prior_spec_sha=$(sha256sum "${prior_spec}" | awk '{print $1}')
+          prior_image=$(docker service inspect "${nginx_service}" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
+          rollout_started=false
+
+          rollback_failed_release() {
+            local original_status=$?
+            local current_spec_sha rollback_ok=false
+            trap - EXIT HUP INT TERM
+            if [[ "${rollout_started}" == "true" && "${original_status}" -ne 0 ]]; then
+              current_spec_sha=$(docker service inspect "${nginx_service}" --format '{{json .Spec}}' 2>/dev/null | sha256sum | awk '{print $1}')
+              if [[ "${current_spec_sha}" != "${prior_spec_sha}" ]]; then
+                echo "Nginx release failed; rolling the shared proxy back to its exact prior service spec." >&2
+                docker service rollback "${nginx_service}" >/dev/null || true
+              fi
+              for _ in $(seq 1 60); do
+                current_spec_sha=$(docker service inspect "${nginx_service}" --format '{{json .Spec}}' 2>/dev/null | sha256sum | awk '{print $1}')
+                desired=$(docker service inspect "${nginx_service}" --format '{{.Spec.Mode.Replicated.Replicas}}' 2>/dev/null || true)
+                running=$(docker service ps --no-trunc --filter desired-state=running --format '{{.Image}} {{.CurrentState}}' "${nginx_service}" 2>/dev/null | \
+                  awk -v expected="${prior_image}" '$1 == expected && $2 == "Running" {count++} END {print count + 0}')
+                if [[ "${current_spec_sha}" == "${prior_spec_sha}" && -n "${desired}" && "${running}" == "${desired}" ]]; then
+                  rollback_ok=true
+                  break
+                fi
+                sleep 2
+              done
+              if [[ "${rollback_ok}" != "true" ]]; then
+                echo "Nginx rollback did not restore the exact prior healthy service; operator intervention is required." >&2
+                original_status=2
+              fi
+            fi
+            [[ ! -e "${prior_spec}" || -L "${prior_spec}" ]] || rm -f -- "${prior_spec}"
+            cleanup_preflight
+            exit "${original_status}"
+          }
+          trap rollback_failed_release EXIT
+          trap 'exit 129' HUP
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          rollout_started=true
           docker stack deploy --compose-file "${remote_dir}/stack.yml" "${stack_name}"
 
           wait_for_nginx_convergence() {
-            local service_name="${stack_name}_nginx"
+            local service_name="${nginx_service}"
             local expected_image="${nginx_image}"
             local update_state desired running_snapshot running_count wrong_image
             for attempt in $(seq 1 60); do
@@ -358,9 +429,13 @@ jobs:
             local url=$1
             local expected_status=$2
             local label=$3
-            local status
+            local status host
             for attempt in $(seq 1 30); do
-              status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "${url}" || true)
+              host=${url#https://}
+              host=${host%%/*}
+              status=$(curl --silent --show-error --max-time 10 \
+                --resolve "${host}:443:${ingress_ip}" \
+                --output /dev/null --write-out '%{http_code}' "${url}" || true)
               if [[ "${status}" == "${expected_status}" ]]; then
                 return 0
               fi
@@ -373,6 +448,7 @@ jobs:
           wait_for_nginx_convergence
           wait_for_status "https://${brio_host}/livez" 204 "Brio live ingress"
           wait_for_status "https://${maildev_host}/" 302 "MailDev OAuth gate"
+          rollout_started=false
           EOF
 
       - name: Remove job-scoped deployment material

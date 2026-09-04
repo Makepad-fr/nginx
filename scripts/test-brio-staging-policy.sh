@@ -31,7 +31,11 @@ for expected in \
   'Brio deployment bundle contains non-canonical network names' \
   'create_args=(--driver overlay --attachable --opt encrypted=true)' \
   'wait_for_nginx_convergence' \
+  'rollback_failed_release' \
+  'docker service rollback "${nginx_service}"' \
+  'prior_spec_sha=$(sha256sum "${prior_spec}"' \
   'docker service ps --no-trunc --filter desired-state=running' \
+  '--resolve "${host}:443:${ingress_ip}"' \
   'wait_for_status "https://${brio_host}/livez" 204' \
   'wait_for_status "https://${maildev_host}/" 302' \
   '"${nginx_image}" nginx -t'; do
@@ -49,7 +53,10 @@ for expected in \
   'GlobalKnownHostsFile=/dev/null' \
   'IdentitiesOnly=yes' \
   'Remove job-scoped deployment material' \
-  'if: always()'; do
+  'if: always()' \
+  "if: github.repository == 'Makepad-fr/nginx' && github.ref == 'refs/heads/main'" \
+  'ref: ${{ github.sha }}' \
+  '[[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]'; do
   grep -Fq -- "${expected}" "${repo_root}/.github/workflows/manual-deploy.yml" || {
     echo "Self-hosted Nginx deploy cleanup control is missing: ${expected}" >&2
     exit 1
@@ -73,7 +80,7 @@ done
 for workflow in \
   "${repo_root}/.github/workflows/ci.yml" \
   "${repo_root}/.github/workflows/manual-deploy.yml"; do
-  checkout_count=$(grep -Fc -- 'uses: actions/checkout@v5' "${workflow}")
+  checkout_count=$(grep -Ec -- 'uses: actions/checkout@[0-9a-f]{40}[[:space:]]+# v[0-9]+' "${workflow}")
   credential_count=$(grep -Fc -- 'persist-credentials: false' "${workflow}")
   if [[ "${checkout_count}" -eq 0 || "${credential_count}" -ne "${checkout_count}" ]]; then
     echo "Every self-hosted Nginx checkout must disable persisted Git credentials: ${workflow}" >&2

@@ -29,6 +29,7 @@ for expected in \
   'MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK must be makepad_brio_staging_app' \
   'MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK must be makepad_brio_staging_maildev_web' \
   'Brio deployment bundle contains non-canonical network names' \
+  'create_args=(--driver overlay --attachable --opt encrypted=true)' \
   'wait_for_nginx_convergence' \
   'docker service ps --no-trunc --filter desired-state=running' \
   'wait_for_status "https://${brio_host}/livez" 204' \
@@ -54,6 +55,11 @@ for expected in \
     exit 1
   }
 done
+
+if grep -Eq -- '--opt[[:space:]]+encrypted([[:space:]]|\))' "${repo_root}/.github/workflows/manual-deploy.yml"; then
+  echo "Brio network creation must not use Docker's valueless encrypted option." >&2
+  exit 1
+fi
 
 # These are literal workflow patterns, not shell paths.
 # shellcheck disable=SC2088

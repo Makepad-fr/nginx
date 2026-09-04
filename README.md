@@ -40,7 +40,9 @@ Each application stack attaches to its corresponding shared network and exposes 
 `runtrace.co` proxies to `RUNTRACE_PROD_UPSTREAM`, which defaults to `http://runtrace-prod-app:8080`; the Runtrace app stack must attach to the same network value as `${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}`.
 
 The Brio staging application uses an encrypted edge overlay shared only with
-Nginx; the MailDev UI uses a separate internal, encrypted overlay. MailDev is protected by the companion GitHub OAuth
+Nginx; the MailDev UI uses a separate internal, encrypted overlay. New Brio
+overlays are created with explicit `--opt encrypted=true`; Docker records a
+valueless `--opt encrypted` as an empty option rather than `true`. MailDev is protected by the companion GitHub OAuth
 gate; every UI, API, and WebSocket request requires an allowlisted maintainer,
 and the relay endpoint is denied at the proxy. Both hosts use a privacy access
 log that omits paths, query strings, client addresses, referrers, and user-agent

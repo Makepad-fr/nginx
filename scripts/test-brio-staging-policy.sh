@@ -38,6 +38,9 @@ for expected in \
   '--resolve "${host}:443:${ingress_ip}"' \
   'wait_for_status "https://${brio_host}/livez" 204' \
   'wait_for_status "https://${maildev_host}/" 302' \
+  '"${remote_dir}/sites/catwlk-prod.conf.template"' \
+  '"${remote_dir}/sites/openpanel-prod.conf.template"' \
+  '"${remote_dir}/sites/runtrace-prod.conf.template"' \
   '"${nginx_image}" nginx -t'; do
   grep -Fq -- "${expected}" "${repo_root}/.github/workflows/manual-deploy.yml" || {
     echo "Brio deployment TLS preflight is missing: ${expected}" >&2

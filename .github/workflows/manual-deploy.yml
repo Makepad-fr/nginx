@@ -246,9 +246,9 @@ jobs:
           validate_brio_certificate "${brio_host}" "${brio_certificate}"
           validate_brio_certificate "${maildev_host}" "${maildev_certificate}"
 
-          # Render only the two new virtual hosts before touching the shared
-          # stack. nginx -t also proves that each configured private key is
-          # readable and matches its certificate.
+          # Render the complete shared proxy configuration before touching the
+          # live stack. This proves the Brio additions do not regress another
+          # virtual host, and nginx -t also verifies every configured key pair.
           nginx_image=$(awk '$1 == "image:" { print $2; exit }' "${remote_dir}/compose.yml")
           letsencrypt_root=$(proxy_setting CATWLK_PROXY_LETSENCRYPT_HOST_PATH)
           acme_root=$(proxy_setting CATWLK_PROXY_ACME_WEBROOT_HOST_PATH)
@@ -264,6 +264,15 @@ jobs:
           }
           trap cleanup_preflight EXIT
           cp "${remote_dir}/sites/00-common.conf.template" \
+            "${remote_dir}/sites/catwlk-prod.conf.template" \
+            "${remote_dir}/sites/catwlk-canary.conf.template" \
+            "${remote_dir}/sites/alerteconso-prod.conf.template" \
+            "${remote_dir}/sites/le-petit-coin-prod.conf.template" \
+            "${remote_dir}/sites/vif-prod.conf.template" \
+            "${remote_dir}/sites/makepad-landing-prod.conf.template" \
+            "${remote_dir}/sites/evidella-prod.conf.template" \
+            "${remote_dir}/sites/openpanel-prod.conf.template" \
+            "${remote_dir}/sites/runtrace-prod.conf.template" \
             "${remote_dir}/sites/brio-staging.conf.template" \
             "${remote_dir}/sites/maildev-brio-staging.conf.template" \
             "${preflight_templates}/"
@@ -361,13 +370,15 @@ jobs:
             local current_spec_sha rollback_ok=false
             trap - EXIT HUP INT TERM
             if [[ "${rollout_started}" == "true" && "${original_status}" -ne 0 ]]; then
-              current_spec_sha=$(docker service inspect "${nginx_service}" --format '{{json .Spec}}' 2>/dev/null | sha256sum | awk '{print $1}')
+              current_spec_sha=$(docker service inspect "${nginx_service}" --format '{{json .Spec}}' 2>/dev/null | sha256sum | awk '{print $1}' || true)
+              current_spec_sha=${current_spec_sha:-missing}
               if [[ "${current_spec_sha}" != "${prior_spec_sha}" ]]; then
                 echo "Nginx release failed; rolling the shared proxy back to its exact prior service spec." >&2
                 docker service rollback "${nginx_service}" >/dev/null || true
               fi
               for _ in $(seq 1 60); do
-                current_spec_sha=$(docker service inspect "${nginx_service}" --format '{{json .Spec}}' 2>/dev/null | sha256sum | awk '{print $1}')
+                current_spec_sha=$(docker service inspect "${nginx_service}" --format '{{json .Spec}}' 2>/dev/null | sha256sum | awk '{print $1}' || true)
+                current_spec_sha=${current_spec_sha:-missing}
                 desired=$(docker service inspect "${nginx_service}" --format '{{.Spec.Mode.Replicated.Replicas}}' 2>/dev/null || true)
                 running=$(docker service ps --no-trunc --filter desired-state=running --format '{{.Image}} {{.CurrentState}}' "${nginx_service}" 2>/dev/null | \
                   awk -v expected="${prior_image}" '$1 == expected && $2 == "Running" {count++} END {print count + 0}')

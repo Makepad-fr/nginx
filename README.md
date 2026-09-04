@@ -138,6 +138,7 @@ networks exist. The network secrets must be exactly
 values are rejected. The manual workflow fails before updating the shared stack
 unless both certificates cover their configured hostnames, remain valid for at
 least seven days, chain to the host trust store, and have matching private keys
-that Nginx can read. It then waits for the exact pinned Nginx image to converge
-and certificate-verifies live Brio and MailDev ingress. The Keycloak host is
-owned by the Keycloak ingress stack.
+that Nginx can read. The preflight renders and validates every existing virtual
+host, not only the two Brio additions. It then waits for the exact pinned Nginx
+image to converge and certificate-verifies live Brio and MailDev ingress. The
+Keycloak host is owned by the Keycloak ingress stack.

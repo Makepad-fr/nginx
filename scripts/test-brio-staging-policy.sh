@@ -84,6 +84,10 @@ if grep -Fq -- 'secrets.' "${ci_workflow}"; then
   echo "Nginx pull-request CI must not receive secrets." >&2
   exit 1
 fi
+if grep -Fq -- 'secrets.MAKEPAD_PROXY_RUNTRACE_APP_NETWORK ||' "${workflow}"; then
+  echo "Runtrace overlay must not fall back around the reviewed production inventory." >&2
+  exit 1
+fi
 
 python3 - "${repo_root}/.github/workflows" <<'PY'
 import pathlib

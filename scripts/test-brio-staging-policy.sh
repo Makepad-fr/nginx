@@ -292,7 +292,9 @@ for expected in \
   'tests/test_ci_release_gate.py' \
   'tests/test_environment_policy.py' \
   'tests/test_secret_scope_policy.py' \
-  'tests/test_credential_sync.py'; do
+  'tests/test_credential_sync.py' \
+  'scripts/validate-github-provider-contract.py' \
+  'deploy/github-app-contracts.json'; do
   grep -Fq -- "${expected}" "${candidate_harness}" || {
     echo "Nginx protected candidate harness is missing: ${expected}" >&2
     exit 1
@@ -301,7 +303,9 @@ done
 
 for expected in \
   'deploy/credential-inventory.json' \
-  'scripts/sync-github-credentials.sh'; do
+  'deploy/github-app-contracts.json' \
+  'scripts/sync-github-credentials.sh' \
+  'scripts/validate-github-provider-contract.py'; do
   grep -Fq -- "${expected}" "${candidate_harness}" || {
     echo "Nginx protected harness does not require credential policy: ${expected}" >&2
     exit 1

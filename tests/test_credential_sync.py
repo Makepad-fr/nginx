@@ -8,6 +8,7 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -18,6 +19,8 @@ ROOT = pathlib.Path(
 ).resolve()
 HELPER = ROOT / "scripts" / "sync-github-credentials.sh"
 INVENTORY = ROOT / "deploy" / "credential-inventory.json"
+PROVIDER_CONTRACT = ROOT / "deploy" / "github-app-contracts.json"
+PROVIDER_VALIDATOR = ROOT / "scripts" / "validate-github-provider-contract.py"
 
 
 FAKE_PASS = r"""#!/usr/bin/env bash
@@ -583,6 +586,32 @@ class CredentialSyncTests(unittest.TestCase):
         self.assertIn(("Nginx · CI hypervisor attestation", "ed25519_private_key"), host_sources)
         self.assertIn(("Nginx · CI base image approval", "repository_id"), host_sources)
 
+    def test_provider_contract_is_exact_and_fail_closed(self) -> None:
+        valid = subprocess.run(
+            [sys.executable, str(PROVIDER_VALIDATOR), str(PROVIDER_CONTRACT)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        self.assertEqual(valid.returncode, 0, valid.stdout)
+
+        payload = json.loads(PROVIDER_CONTRACT.read_text(encoding="utf-8"))
+        payload["apps"][0]["events"] = ["push"]
+        drifted = self.temp / "drifted-github-app-contracts.json"
+        drifted.write_text(json.dumps(payload), encoding="utf-8")
+        invalid = subprocess.run(
+            [sys.executable, str(PROVIDER_VALIDATOR), str(drifted)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn("provider contract violation", invalid.stdout)
+
     def test_check_is_names_only_and_reports_host_boundaries(self) -> None:
         result = self.run_helper("--check", expected=0)
         self.assertIn("HOST_DESTINATION boundary=ci-hypervisor-root-file", result.stdout)
@@ -845,6 +874,8 @@ class CredentialSyncTests(unittest.TestCase):
         copied_policy = copied_root / "scripts" / "github_environment_policy.py"
         shutil.copy2(HELPER, copied_helper)
         shutil.copy2(ROOT / "scripts" / "github_environment_policy.py", copied_policy)
+        shutil.copy2(PROVIDER_VALIDATOR, copied_root / "scripts" / PROVIDER_VALIDATOR.name)
+        shutil.copy2(PROVIDER_CONTRACT, copied_root / "deploy" / PROVIDER_CONTRACT.name)
         payload = json.loads(INVENTORY.read_text(encoding="utf-8"))
         payload["repositoryVariables"].append(dict(payload["repositoryVariables"][0]))
         copied_inventory = copied_root / "deploy" / INVENTORY.name
@@ -863,6 +894,8 @@ class CredentialSyncTests(unittest.TestCase):
         copied_policy = copied_root / "scripts" / "github_environment_policy.py"
         shutil.copy2(HELPER, copied_helper)
         shutil.copy2(ROOT / "scripts" / "github_environment_policy.py", copied_policy)
+        shutil.copy2(PROVIDER_VALIDATOR, copied_root / "scripts" / PROVIDER_VALIDATOR.name)
+        shutil.copy2(PROVIDER_CONTRACT, copied_root / "deploy" / PROVIDER_CONTRACT.name)
         copied_inventory = copied_root / "deploy" / INVENTORY.name
         original = json.loads(INVENTORY.read_text(encoding="utf-8"))
 

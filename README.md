@@ -230,6 +230,15 @@ sync exact-compares post-write Proton fields and public GitHub variables while
 keeping GitHub secret read-back names-only; see `docs/credential-sync.md` for
 the trust gates and rollout instructions.
 
+The provider-side setup is pinned separately in
+`deploy/github-app-contracts.json`. Create both Apps under the `Makepad-fr`
+organization with the exact display names `Makepad Nginx CI Checks` and
+`Makepad Nginx CI Launcher`. Disable each App's webhook, leave its webhook URL
+empty, subscribe to no events, and install each App with selected-repository
+access to `Makepad-fr/nginx` only. The repository remains intentionally public,
+and its selected-workflow runner groups continue to allow public repositories;
+neither allowance permits an all-repositories App installation.
+
 | Proton Pass item | Exact fields | GitHub or host mirror | Authority boundary |
 | --- | --- | --- | --- |
 | `Nginx · CI Checks App` | `app_id`, `private_key`, `private_key_fingerprint` | Repository variable `NGINX_PR_CHECK_APP_ID`; `release-nginx` secret `NGINX_PR_CHECK_APP_PRIVATE_KEY` | Installed only on `Makepad-fr/nginx`: Metadata read, Checks write, and organization self-hosted-runners read. No Actions, Contents, administration, deployment, environment, or secret access. |

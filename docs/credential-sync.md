@@ -8,6 +8,14 @@ edit cannot silently redirect a destination to another item or field. The
 inventory does not contain values. Repository code never creates, rotates,
 exports, or deletes a provider credential.
 
+`deploy/github-app-contracts.json` is the fail-closed provider setup contract.
+It pins the `Makepad-fr` organization owner, deterministic Checks and Launcher
+App names, disabled and empty webhooks, no event subscriptions, exact
+permissions, and selected-repository installation on `Makepad-fr/nginx` only.
+`scripts/validate-github-provider-contract.py` runs before the sync helper makes
+any provider call, and the protected candidate harness runs its protected copy
+against the candidate contract.
+
 Run this helper only from a clean checkout of reviewed protected code on a
 trusted administrator workstation. Never run it from a pull-request checkout
 or a self-hosted Actions workspace.

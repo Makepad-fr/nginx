@@ -20,6 +20,8 @@ readonly max_value_bytes=49152
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 readonly repo_root
 readonly inventory=${repo_root}/deploy/credential-inventory.json
+readonly provider_contract=${repo_root}/deploy/github-app-contracts.json
+readonly provider_contract_validator=${repo_root}/scripts/validate-github-provider-contract.py
 readonly environment_policy=${repo_root}/scripts/github_environment_policy.py
 
 usage() {
@@ -79,7 +81,12 @@ for command_name in pass-cli gh python3 sort grep mktemp find; do
   command -v "${command_name}" >/dev/null || die "${command_name} is required"
 done
 [[ -f "${inventory}" && ! -L "${inventory}" ]] || die 'credential inventory is missing or is a symbolic link'
+[[ -f "${provider_contract}" && ! -L "${provider_contract}" ]] || die 'GitHub provider contract is missing or is a symbolic link'
+[[ -f "${provider_contract_validator}" && ! -L "${provider_contract_validator}" ]] || \
+  die 'GitHub provider contract validator is missing or is a symbolic link'
 [[ -f "${environment_policy}" && ! -L "${environment_policy}" ]] || die 'environment policy helper is missing or is a symbolic link'
+PYTHONDONTWRITEBYTECODE=1 python3 "${provider_contract_validator}" "${provider_contract}" || \
+  die 'GitHub provider settings do not match the immutable reviewed contract'
 
 status_root=$(mktemp -d "${TMPDIR:-/tmp}/nginx-credential-sync.XXXXXXXX")
 [[ -d "${status_root}" && ! -L "${status_root}" ]] || die 'could not create a private status directory'

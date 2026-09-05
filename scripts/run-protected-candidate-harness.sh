@@ -29,6 +29,7 @@ for required in \
   .github/workflows/pr-ci-result.yml \
   compose.yml \
   deploy/credential-inventory.json \
+  deploy/github-app-contracts.json \
   scripts/ci_base_image.py \
   scripts/dispatch-ci-attestation.mjs \
   scripts/github_environment_policy.py \
@@ -40,6 +41,7 @@ for required in \
   scripts/run-nginx-ci-jit-vm.sh \
   scripts/run-nginx-ci-queue-controller.sh \
   scripts/sync-github-credentials.sh \
+  scripts/validate-github-provider-contract.py \
   scripts/test-brio-staging-policy.sh \
   scripts/test-runtrace-upload-policy.sh \
   sites/00-common.conf.template \
@@ -55,6 +57,10 @@ command -v actionlint >/dev/null || die "actionlint is required"
 command -v docker >/dev/null || die "docker is required"
 command -v node >/dev/null || die "node is required"
 command -v python3 >/dev/null || die "python3 is required"
+
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  "${policy_root}/scripts/validate-github-provider-contract.py" \
+  "${candidate_root}/deploy/github-app-contracts.json"
 
 shell_files=()
 while IFS= read -r -d '' shell_file; do

@@ -194,6 +194,12 @@ IDs, bot identity, SHA-256 format, Ed25519 key, runner groups, and App
 permissions. The generic sync helper mirrors bytes but does not weaken those
 checks.
 
+`Brio · operation lease coordinator` is an explicit host-only Proton item with
+fields `coordinator_json`, `ssh_private_key`, `ssh_known_hosts`, and
+`ssh_public_key`. The first three install mode `0600` under
+`/etc/makepad/brio-operation-lease`; only the public key is installed for the
+locked endpoint account. These values never enter a GitHub secret or variable.
+
 ## Root-only and operator-only boundaries
 
 These values stay canonical in Proton but must never become Actions secrets or
@@ -208,6 +214,10 @@ variables:
 | `Nginx · CI Launcher App/private_key_fingerprint` | operator verification record |
 | `Nginx · CI hypervisor attestation/ed25519_private_key` | root-only `attestation-private-key.pem`, mode `0400` |
 | `Nginx · CI hypervisor attestation/public_key_fingerprint` | operator verification record |
+| `Brio · operation lease coordinator/coordinator_json` | root-only `/etc/makepad/brio-operation-lease/coordinator.json`, mode `0600` |
+| `Brio · operation lease coordinator/ssh_private_key` | root-only `/etc/makepad/brio-operation-lease/id_ed25519`, mode `0600` |
+| `Brio · operation lease coordinator/ssh_known_hosts` | root-only `/etc/makepad/brio-operation-lease/known_hosts`, mode `0600` |
+| `Brio · operation lease coordinator/ssh_public_key` | locked endpoint `authorized_keys`; private counterpart never installed there |
 | `Nginx · CI base image approval/qcow2_sha256` | root `controller.env:NGINX_CI_BASE_IMAGE_SHA256` |
 | `Nginx · CI base image approval/repository_id` | root `controller.env:NGINX_CI_REPOSITORY_ID` |
 | `Nginx · host control alert webhook/url` | root file named by `NGINX_HOST_ALERT_URL_FILE`, mode `0400` |

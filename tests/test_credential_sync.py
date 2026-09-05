@@ -593,12 +593,6 @@ class CredentialSyncTests(unittest.TestCase):
                 "Nginx · GitHub runner policy bootstrap",
                 "organization_runner_admin_token",
             ),
-        }
-        observed_host_entries = {
-            (entry["boundary"], entry["destination"], entry["item"], entry["field"])
-            for entry in payload["hostEntries"]
-        }
-        reviewed_brio_lease_entries = {
             (
                 "host-root-file",
                 "/etc/makepad/brio-operation-lease/coordinator.json",
@@ -624,10 +618,11 @@ class CredentialSyncTests(unittest.TestCase):
                 "ssh_public_key",
             ),
         }
-        self.assertIn(
-            observed_host_entries,
-            (expected_host_entries, expected_host_entries | reviewed_brio_lease_entries),
-        )
+        observed_host_entries = {
+            (entry["boundary"], entry["destination"], entry["item"], entry["field"])
+            for entry in payload["hostEntries"]
+        }
+        self.assertEqual(observed_host_entries, expected_host_entries)
         host_sources = {(entry["item"], entry["field"]) for entry in payload["hostEntries"]}
         self.assertIn(("Nginx · CI Launcher App", "private_key"), host_sources)
         self.assertIn(("Nginx · CI hypervisor attestation", "ed25519_private_key"), host_sources)

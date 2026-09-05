@@ -269,6 +269,7 @@ neither allowance permits an all-repositories App installation.
 | `Nginx · host control alert webhook` | `url` | Root-owned mode-`0400` file named by `NGINX_HOST_ALERT_URL_FILE` | HTTPS operations channel independent of GitHub; never expose it to a workflow or guest. |
 | `Nginx · production deployment` | `private_key`, `known_hosts`, `host`, `port`, `user`, `remote_dir`, `stack_name` | `production` secrets `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`; `NGINX_DEPLOY_*` environment variables | Dedicated non-root deploy account and exact pinned proxy host. |
 | `Nginx · production overlay names` | `prod`, `canary`, `alerteconso`, `le_petit_coin`, `vif`, `makepad_landing`, `evidella`, `openpanel`, `runtrace`, `brio_staging`, `maildev_brio_staging_web` | Matching `production` `MAKEPAD_PROXY_*_APP_NETWORK` secrets | Network identifiers only; retain their current secret aliases for workflow compatibility. |
+| `Brio · operation lease coordinator` | `coordinator_json`, `ssh_private_key`, `ssh_known_hosts`, `ssh_public_key` | Root-only coordinator files and locked endpoint public key on each Brio provider host | Shared app → identity → database exclusion authority. No field is mirrored into GitHub. |
 | Name-only retained destinations | No Proton field and no write authority | `production` secrets `MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK`, `MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK` | Exact compatibility names for open PR #8 and a potentially deployed predecessor. The Brio reconciler reports but never reads, writes, or deletes them. |
 | `Nginx · GitHub repository policy bootstrap` | `repository_admin_token` | Stream once to `configure-github-ci-policy.sh`; never store in Actions | Short-lived repository Administration, Actions, Environments, Variables, and Metadata authority; revoke after read-back. |
 | `Nginx · GitHub runner policy bootstrap` | `organization_runner_admin_token` | Stream once to `configure-runner-groups.sh`; never store in Actions | Short-lived organization runner-group authority plus repository Metadata read; revoke after read-back. |
@@ -330,6 +331,42 @@ The workflow deploys only the proxy stack. If the shared application network doe
 `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is required. Keep its canonical value in
 the `runtrace` field of `Nginx · production overlay names`; the deployment
 workflow has no literal fallback around the protected inventory.
+
+### Brio deployment/evidence exclusion lease
+
+Every shared Nginx deployment includes the Brio routes, so it acquires the
+same three host-local leases as the Brio application and its identity/database
+providers: `app`, then `identity`, then `database`. It releases in reverse on
+success and failure. The fixed four-hour lease never renews on an idempotent
+same-owner acquisition, while this workflow is bounded to 30 minutes.
+
+The root endpoint `/usr/local/libexec/makepad/brio-operation-lease` accepts
+only `acquire|status|release <64-lowercase-hex-owner>
+<deployment|evidence>`. The workflow derives its public owner from repository,
+run, attempt, and exact SHA, and the remote deployment verifies
+`status OWNER deployment` before remote filesystem mutation and immediately
+before `docker stack deploy`. A concurrent release-evidence run holds the
+other kind and therefore blocks the proxy deployment rather than observing a
+moving runtime.
+
+Bootstrap this proxy/app node from the canonical Proton item after all three
+endpoint hosts have been configured:
+
+```sh
+sudo scripts/install-brio-operation-lease.sh \
+  makepad \
+  /secure/operator-path/operation-lease.pub \
+  /secure/operator-path/coordinator.json \
+  /secure/operator-path/operation-lease.key \
+  /secure/operator-path/known_hosts
+```
+
+The installer creates a root-owned mode-`0700` volatile runtime directory and
+mode-`0600` non-symlink guard. The lease state exists only while held, so a
+reboot removes stale volatile state. Installation fails closed if an active,
+linked, malformed, misowned, or permissive object is encountered. Initial
+rollout intentionally remains blocked until this root bootstrap succeeds; do
+not introduce an unleased compatibility path.
 
 ## TLS
 

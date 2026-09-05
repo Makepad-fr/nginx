@@ -228,6 +228,7 @@ for expected in \
   'readonly canonical_source="Nginx · production overlay names/openpanel"' \
   'repos/${repository}/environments/${environment_name}/secrets?per_page=100' \
   'repos/${repository}/actions/secrets/${secret_name}' \
+  'production must use exact custom deployment-branch protection' \
   'production secret was not explicitly refreshed after the repository duplicate' \
   'validate_inventory check'; do
   grep -Fq -- "${expected}" "${secret_scope_policy}" || {
@@ -401,11 +402,10 @@ for expected in \
 done
 for expected in \
   'configure_environment release-nginx' \
+  'configure_environment production' \
   'NGINX_CI_LAUNCHER_APP_SENDER_ID' \
   'NGINX_CI_APPROVED_BASE_IMAGE_SHA256' \
   'NGINX_CI_ATTESTATION_PUBLIC_KEY' \
-  'repos/${repository}/actions/secrets?per_page=100' \
-  'repository-level MAKEPAD_PROXY_OPENPANEL_APP_NETWORK is forbidden' \
   'required_signatures' \
   '"context": "policy-and-render"' \
   '"app_id": int(sys.argv[1])'; do

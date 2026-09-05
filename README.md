@@ -245,6 +245,9 @@ pass-cli item view --vault-name '<operators-vault>' \
   gh secret set MAKEPAD_PROXY_OPENPANEL_APP_NETWORK \
     --repo Makepad-fr/nginx --env production
 
+# Run configure-github-ci-policy.sh exactly as shown in the bootstrap section.
+# Its read-back must prove production permits only the main branch.
+
 pass-cli item view --vault-name '<operators-vault>' \
   --item-title 'Nginx · GitHub repository policy bootstrap' \
   --field repository_admin_token | \
@@ -258,14 +261,16 @@ pass-cli item view --vault-name '<operators-vault>' \
   ./scripts/migrate-openpanel-secret-scope.sh --check
 ```
 
-The migration helper first proves that `production` is restricted to exact
-`main`, that the environment copy exists, and that its `updated_at` is later
-than the legacy copy. It deletes only the exact repository-level name, then
-re-reads both inventories and proves the environment copy remains. Revoke the
-short-lived repository administrator token and record only the Proton item ID,
+The CI policy bootstrap narrows both `production` and `release-nginx` to exact
+custom `main` before deletion. The migration helper then proves that exact
+policy, that the environment copy exists, and that its `updated_at` is later
+than the legacy copy. It deletes only the exact repository-level name, re-reads
+both inventories, and proves the environment copy remains. Re-run `--check`,
+revoke the short-lived administrator token, and record only the Proton item ID,
 field name, timestamps, and successful non-secret audit result. Never reverse
-the order: deleting the broad copy before re-mirroring from Proton can break
-OpenPanel routing on the next deployment.
+the order: deleting the broad copy before re-mirroring from Proton or before
+narrowing the environment creates either an outage or a wider credential
+boundary.
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
 `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is optional and defaults to `makepad_runtrace_prod_app`, matching the Runtrace app deployment template; set it only if the Runtrace app stack uses a different overlay network name.

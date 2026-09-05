@@ -48,8 +48,7 @@ protection_json=$(mktemp)
 signatures_json=$(mktemp)
 variables_json=$(mktemp)
 launcher_sender_json=$(mktemp)
-repository_secrets_json=$(mktemp)
-temporary_files+=("${repository_json}" "${protection_json}" "${signatures_json}" "${variables_json}" "${launcher_sender_json}" "${repository_secrets_json}")
+temporary_files+=("${repository_json}" "${protection_json}" "${signatures_json}" "${variables_json}" "${launcher_sender_json}")
 
 gh api --header "X-GitHub-Api-Version: ${api_version}" "repos/${repository}" >"${repository_json}"
 python3 - "${repository_json}" <<'PY'
@@ -160,6 +159,7 @@ PY
 }
 
 configure_environment release-nginx
+configure_environment production
 
 # Numeric App identity, reviewed image digest, and the public half of the
 # teardown key are non-secret trust anchors. The private Ed25519 key remains
@@ -333,32 +333,6 @@ import sys
 
 if pathlib.Path(sys.argv[1]).read_text().strip() != pathlib.Path(sys.argv[2]).read_text().strip():
     raise SystemExit("attestation public key failed repository-variable read-back")
-PY
-
-# Deployment credentials must never silently fall back from a protected
-# environment to repository scope. The dedicated migration helper performs the
-# guarded deletion; this policy reconciler only fails closed if it remains.
-gh api --header "X-GitHub-Api-Version: ${api_version}" \
-  "repos/${repository}/actions/secrets?per_page=100" >"${repository_secrets_json}"
-python3 - "${repository_secrets_json}" <<'PY'
-import json
-import pathlib
-import sys
-
-payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
-secrets = payload.get("secrets", [])
-if payload.get("total_count", len(secrets)) != len(secrets):
-    raise SystemExit("repository secret response is truncated")
-forbidden = [
-    item.get("name")
-    for item in secrets
-    if item.get("name") == "MAKEPAD_PROXY_OPENPANEL_APP_NETWORK"
-]
-if forbidden:
-    raise SystemExit(
-        "repository-level MAKEPAD_PROXY_OPENPANEL_APP_NETWORK is forbidden; "
-        "run the guarded Proton-first migration"
-    )
 PY
 
 printf 'Protected %s main with signed teardown, Checks App %s, and Launcher sender %s.\n' \

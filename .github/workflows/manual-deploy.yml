@@ -44,6 +44,7 @@ jobs:
       group: org/Nginx Deploy
       labels: [self-hosted, linux, x64, makepad-nginx-deploy]
     environment: production
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -165,6 +166,21 @@ jobs:
             echo "MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK=${MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK}"
           } > "${bundle_root}/envs/production/.env.deploy"
 
+      - name: Acquire the cross-host Brio deployment lease
+        shell: bash
+        env:
+          BRIO_LEASE_REMOTE_HOST: ${{ vars.NGINX_DEPLOY_HOST }}
+          BRIO_LEASE_REMOTE_PORT: ${{ vars.NGINX_DEPLOY_PORT }}
+          BRIO_LEASE_REMOTE_USER: ${{ vars.NGINX_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          owner=$(python3 scripts/derive-brio-operation-owner.py deployment)
+          [[ "${owner}" =~ ^[0-9a-f]{64}$ ]]
+          printf 'BRIO_OPERATION_LEASE_OWNER=%s\n' "${owner}" >> "${GITHUB_ENV}"
+          export BRIO_LEASE_SSH_DIRECTORY="${RUNNER_TEMP}/nginx-deploy-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          scripts/brio-operation-lease-remote.sh acquire "${owner}"
+          printf 'BRIO_OPERATION_LEASE_ACQUIRED=true\n' >> "${GITHUB_ENV}"
+
       - name: Deploy via Docker Swarm
         shell: bash
         env:
@@ -196,8 +212,12 @@ jobs:
           ssh_opts=(-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=${known_hosts_file}" -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i "${private_key_file}" -p "${remote_port}")
           scp_opts=(-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=${known_hosts_file}" -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i "${private_key_file}" -P "${remote_port}")
           remote_target="${REMOTE_USER}@${REMOTE_HOST}"
+          [[ "${BRIO_OPERATION_LEASE_OWNER}" =~ ^[0-9a-f]{64}$ ]]
+          printf -v lease_owner_q %q "${BRIO_OPERATION_LEASE_OWNER}"
 
-          ssh "${ssh_opts[@]}" "${remote_target}" mkdir -p "${REMOTE_DIR}/envs/production" "${REMOTE_DIR}/sites"
+          # All interpolated remote values are pinned or strictly allowlisted above.
+          # shellcheck disable=SC2029
+          ssh "${ssh_opts[@]}" "${remote_target}" "/usr/bin/sudo -n /usr/local/libexec/makepad/brio-operation-lease status ${lease_owner_q} deployment >/dev/null && mkdir -p '${REMOTE_DIR}/envs/production' '${REMOTE_DIR}/sites'"
           scp "${scp_opts[@]}" "${bundle_root}/compose.yml" "${remote_target}:${REMOTE_DIR}/compose.yml"
           scp "${scp_opts[@]}" "${bundle_root}/envs/production/compose.yml" "${remote_target}:${REMOTE_DIR}/envs/production/compose.yml"
           scp "${scp_opts[@]}" "${bundle_root}/envs/production/.env.proxy" "${remote_target}:${REMOTE_DIR}/envs/production/.env.proxy"
@@ -215,11 +235,15 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/brio-staging.conf.template" "${remote_target}:${REMOTE_DIR}/sites/brio-staging.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/maildev-brio-staging.conf.template" "${remote_target}:${REMOTE_DIR}/sites/maildev-brio-staging.conf.template"
 
-          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" "${REMOTE_HOST}" <<'EOF'
+          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" "${REMOTE_HOST}" "${BRIO_OPERATION_LEASE_OWNER}" <<'EOF'
           set -euo pipefail
           remote_dir=$1
           stack_name=$2
           ingress_ip=$3
+          lease_owner=$4
+          [[ "${lease_owner}" =~ ^[0-9a-f]{64}$ ]]
+          /usr/bin/sudo -n /usr/local/libexec/makepad/brio-operation-lease \
+            status "${lease_owner}" deployment >/dev/null
           deploy_env=production
           env_deploy="${remote_dir}/envs/${deploy_env}/.env.deploy"
           env_proxy="${remote_dir}/envs/${deploy_env}/.env.proxy"
@@ -432,6 +456,8 @@ jobs:
           trap 'exit 130' INT
           trap 'exit 143' TERM
 
+          /usr/bin/sudo -n /usr/local/libexec/makepad/brio-operation-lease \
+            status "${lease_owner}" deployment >/dev/null
           rollout_started=true
           docker stack deploy --compose-file "${remote_dir}/stack.yml" "${stack_name}"
 
@@ -495,6 +521,22 @@ jobs:
           wait_for_status "https://${maildev_host}/" 302 "MailDev OAuth gate"
           rollout_started=false
           EOF
+
+      - name: Release the cross-host Brio deployment lease
+        if: always()
+        shell: bash
+        env:
+          BRIO_LEASE_REMOTE_HOST: ${{ vars.NGINX_DEPLOY_HOST }}
+          BRIO_LEASE_REMOTE_PORT: ${{ vars.NGINX_DEPLOY_PORT }}
+          BRIO_LEASE_REMOTE_USER: ${{ vars.NGINX_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          [[ "${BRIO_OPERATION_LEASE_ACQUIRED:-}" == true ]] || exit 0
+          ssh_directory="${RUNNER_TEMP}/nginx-deploy-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          [[ -d "${ssh_directory}" && ! -L "${ssh_directory}" ]] || exit 0
+          owner=$(python3 scripts/derive-brio-operation-owner.py deployment)
+          export BRIO_LEASE_SSH_DIRECTORY="${ssh_directory}"
+          scripts/brio-operation-lease-remote.sh release "${owner}"
 
       - name: Remove job-scoped deployment material
         if: always()

@@ -39,6 +39,8 @@ for expected in \
   '--resolve "${host}:443:${ingress_ip}"' \
   'wait_for_status "https://${brio_host}/livez" 204' \
   'wait_for_status "https://${maildev_host}/" 302' \
+  'brio-operation-lease status' \
+  'status "${lease_owner}" deployment' \
   '"${remote_dir}/sites/catwlk-prod.conf.template"' \
   '"${remote_dir}/sites/openpanel-prod.conf.template"' \
   '"${remote_dir}/sites/runtrace-prod.conf.template"' \
@@ -57,6 +59,11 @@ for expected in \
   'GlobalKnownHostsFile=/dev/null' \
   'IdentitiesOnly=yes' \
   'Remove job-scoped deployment material' \
+  'Acquire the cross-host Brio deployment lease' \
+  'Release the cross-host Brio deployment lease' \
+  'brio-operation-lease-remote.sh acquire "${owner}"' \
+  'brio-operation-lease-remote.sh release "${owner}"' \
+  'derive-brio-operation-owner.py deployment' \
   'if: always()' \
   "if: github.repository == 'Makepad-fr/nginx' && github.ref == 'refs/heads/main'" \
   'REMOTE_HOST: ${{ vars.NGINX_DEPLOY_HOST }}' \
@@ -158,6 +165,12 @@ controller_wrapper="${repo_root}/scripts/run-nginx-ci-queue-controller.sh"
 controller_unit="${repo_root}/host/systemd/nginx-ci-queue-controller.service"
 controller_alert_unit="${repo_root}/host/systemd/nginx-ci-queue-alert.service"
 host_alert="${repo_root}/host/libexec/send-nginx-host-alert"
+lease_executable="${repo_root}/scripts/brio-operation-lease.py"
+lease_dispatch="${repo_root}/scripts/brio-operation-lease-dispatch.py"
+lease_coordinator="${repo_root}/scripts/brio-operation-lease-coordinator.py"
+lease_remote="${repo_root}/scripts/brio-operation-lease-remote.sh"
+lease_owner="${repo_root}/scripts/derive-brio-operation-owner.py"
+lease_installer="${repo_root}/scripts/install-brio-operation-lease.sh"
 codeowners="${repo_root}/.github/CODEOWNERS"
 for expected in \
   'pull_request_target:' \
@@ -223,7 +236,13 @@ for required_file in \
   "${controller_wrapper}" \
   "${controller_unit}" \
   "${controller_alert_unit}" \
-  "${host_alert}"; do
+  "${host_alert}" \
+  "${lease_executable}" \
+  "${lease_dispatch}" \
+  "${lease_coordinator}" \
+  "${lease_remote}" \
+  "${lease_owner}" \
+  "${lease_installer}"; do
   [[ -f "${required_file}" && ! -L "${required_file}" ]] || {
     echo "Nginx CI trust helper is missing or symlinked: ${required_file}" >&2
     exit 1
@@ -293,6 +312,8 @@ for expected in \
   'tests/test_environment_policy.py' \
   'tests/test_secret_scope_policy.py' \
   'tests/test_credential_sync.py' \
+  'tests/test_brio_operation_lease.py' \
+  'tests/test_brio_operation_lease_wiring.py' \
   'scripts/validate-github-provider-contract.py' \
   'deploy/github-app-contracts.json'; do
   grep -Fq -- "${expected}" "${candidate_harness}" || {

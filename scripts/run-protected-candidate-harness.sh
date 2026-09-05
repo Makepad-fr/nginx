@@ -30,6 +30,7 @@ for required in \
   compose.yml \
   scripts/ci_base_image.py \
   scripts/dispatch-ci-attestation.mjs \
+  scripts/github_environment_policy.py \
   scripts/migrate-openpanel-secret-scope.sh \
   scripts/nginx-ci-queue-controller.mjs \
   scripts/publish-pr-ci-check.mjs \
@@ -85,6 +86,8 @@ NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_base_image_integrity.py"
 NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_ci_release_gate.py"
+NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
+  "${policy_root}/tests/test_environment_policy.py"
 NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_secret_scope_policy.py"
 

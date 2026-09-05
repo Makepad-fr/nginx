@@ -7,6 +7,9 @@ set -euo pipefail
 
 readonly repository="Makepad-fr/nginx"
 readonly api_version="2022-11-28"
+script_directory=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+readonly script_directory
+readonly environment_policy_helper="${script_directory}/github_environment_policy.py"
 
 die() {
   printf '%s\n' "$*" >&2
@@ -25,6 +28,7 @@ done
 [[ "${launcher_sender_id}" =~ ^[1-9][0-9]*$ ]] || die "LAUNCHER_APP_SENDER_ID must be a positive integer"
 [[ "${approved_base_digest}" =~ ^[a-f0-9]{64}$ ]] || die "APPROVED_BASE_SHA256 must be lowercase SHA-256"
 [[ -f "${attestation_public_key_file}" && ! -L "${attestation_public_key_file}" ]] || die "ATTESTATION_PUBLIC_KEY_FILE must be a regular file"
+[[ -f "${environment_policy_helper}" && ! -L "${environment_policy_helper}" ]] || die "GitHub environment policy helper must be a regular file"
 openssl pkey -pubin -in "${attestation_public_key_file}" -text -noout 2>/dev/null | grep -Fq ED25519 || die "attestation public key must be Ed25519"
 
 IFS= read -r administration_token || die "a repository-administration token is required on standard input"
@@ -48,7 +52,8 @@ protection_json=$(mktemp)
 signatures_json=$(mktemp)
 variables_json=$(mktemp)
 launcher_sender_json=$(mktemp)
-temporary_files+=("${repository_json}" "${protection_json}" "${signatures_json}" "${variables_json}" "${launcher_sender_json}")
+environments_json=$(mktemp)
+temporary_files+=("${repository_json}" "${protection_json}" "${signatures_json}" "${variables_json}" "${launcher_sender_json}" "${environments_json}")
 
 gh api --header "X-GitHub-Api-Version: ${api_version}" "repos/${repository}" >"${repository_json}"
 python3 - "${repository_json}" <<'PY'
@@ -83,48 +88,67 @@ if (
     raise SystemExit("LAUNCHER_APP_SENDER_ID does not identify a non-site-admin GitHub App bot")
 PY
 
+# Inventory all environments before mutating either target. The helper rejects
+# pagination truncation and case-insensitive duplicates, so a missing target can
+# be distinguished safely from an unreadable or ambiguous response.
+gh api --header "X-GitHub-Api-Version: ${api_version}" \
+  "repos/${repository}/environments?per_page=100" >"${environments_json}"
+python3 "${environment_policy_helper}" environment-presence \
+  "${environments_json}" release-nginx >/dev/null
+python3 "${environment_policy_helper}" environment-presence \
+  "${environments_json}" production >/dev/null
+
 configure_environment() {
   local environment_name=$1
-  local environment_json environment_branches_json
+  local environment_json environment_branches_json environment_request_json
+  local environment_snapshot_json environment_state branch_plan
+  local main_policy_count policy_id
   environment_json=$(mktemp)
   environment_branches_json=$(mktemp)
-  temporary_files+=("${environment_json}" "${environment_branches_json}")
+  environment_request_json=$(mktemp)
+  environment_snapshot_json=$(mktemp)
+  branch_plan=$(mktemp)
+  temporary_files+=("${environment_json}" "${environment_branches_json}" \
+    "${environment_request_json}" "${environment_snapshot_json}" "${branch_plan}")
 
-  printf '%s' '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' | \
-    gh api --method PUT --header "X-GitHub-Api-Version: ${api_version}" \
-      "repos/${repository}/environments/${environment_name}" --input - >/dev/null
+  environment_state=$(python3 "${environment_policy_helper}" environment-presence \
+    "${environments_json}" "${environment_name}")
+  if [[ "${environment_state}" == present ]]; then
+    gh api --header "X-GitHub-Api-Version: ${api_version}" \
+      "repos/${repository}/environments/${environment_name}" >"${environment_json}"
+  elif [[ "${environment_state}" == missing ]]; then
+    printf '{"name":"%s","protection_rules":[],"deployment_branch_policy":null}\n' \
+      "${environment_name}" >"${environment_json}"
+  else
+    die "unexpected ${environment_name} inventory state"
+  fi
+
+  # PUT replaces environment settings. Reconstruct its complete supported
+  # protection payload from the authoritative GET response so exact reviewer
+  # IDs, prevent-self-review, and wait timers survive the branch restriction.
+  # Unknown or duplicate protection rules stop the run before this mutation.
+  python3 "${environment_policy_helper}" request \
+    "${environment_json}" "${environment_name}" >"${environment_request_json}"
+  python3 "${environment_policy_helper}" snapshot \
+    "${environment_json}" "${environment_name}" >"${environment_snapshot_json}"
+  gh api --method PUT --header "X-GitHub-Api-Version: ${api_version}" \
+    "repos/${repository}/environments/${environment_name}" \
+    --input "${environment_request_json}" >/dev/null
   gh api --header "X-GitHub-Api-Version: ${api_version}" \
     "repos/${repository}/environments/${environment_name}/deployment-branch-policies?per_page=100" \
     >"${environment_branches_json}"
-  while IFS= read -r policy_id; do
-    [[ -z "${policy_id}" ]] || gh api --method DELETE --header "X-GitHub-Api-Version: ${api_version}" \
-      "repos/${repository}/environments/${environment_name}/deployment-branch-policies/${policy_id}" >/dev/null
-  done < <(python3 - "${environment_branches_json}" <<'PY'
-import json
-import pathlib
-import sys
-
-payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
-policies = payload.get("branch_policies", [])
-if payload.get("total_count", len(policies)) > len(policies):
-    raise SystemExit("more than 100 deployment branch policies require explicit pagination")
-for policy in policies:
-    if (policy.get("name"), policy.get("type")) != ("main", "branch"):
-        policy_id = policy.get("id")
-        if not isinstance(policy_id, int) or policy_id <= 0:
-            raise SystemExit("deployment policy has no valid ID")
-        print(policy_id)
-PY
-  )
-  main_policy_count=$(python3 - "${environment_branches_json}" <<'PY'
-import json
-import pathlib
-import sys
-
-policies = json.loads(pathlib.Path(sys.argv[1]).read_text()).get("branch_policies", [])
-print(sum((policy.get("name"), policy.get("type")) == ("main", "branch") for policy in policies))
-PY
-  )
+  # Materialize and validate the plan before deleting anything. Unlike a
+  # process-substitution producer, a failed helper exits the parent script.
+  python3 "${environment_policy_helper}" branch-plan \
+    "${environment_branches_json}" >"${branch_plan}"
+  {
+    IFS= read -r main_policy_count || die "${environment_name} branch plan is empty"
+    while IFS= read -r policy_id; do
+      [[ "${policy_id}" =~ ^[1-9][0-9]*$ ]] || die "${environment_name} branch plan has an invalid policy ID"
+      gh api --method DELETE --header "X-GitHub-Api-Version: ${api_version}" \
+        "repos/${repository}/environments/${environment_name}/deployment-branch-policies/${policy_id}" >/dev/null
+    done
+  } <"${branch_plan}"
   if [[ "${main_policy_count}" == 0 ]]; then
     printf '%s' '{"name":"main","type":"branch"}' | gh api --method POST \
       --header "X-GitHub-Api-Version: ${api_version}" \
@@ -138,24 +162,9 @@ PY
   gh api --header "X-GitHub-Api-Version: ${api_version}" \
     "repos/${repository}/environments/${environment_name}/deployment-branch-policies?per_page=100" \
     >"${environment_branches_json}"
-  python3 - "${environment_json}" "${environment_branches_json}" "${environment_name}" <<'PY'
-import json
-import pathlib
-import sys
-
-environment = json.loads(pathlib.Path(sys.argv[1]).read_text())
-payload = json.loads(pathlib.Path(sys.argv[2]).read_text())
-policies = payload.get("branch_policies", [])
-if environment.get("name") != sys.argv[3] or environment.get("deployment_branch_policy") != {
-    "protected_branches": False,
-    "custom_branch_policies": True,
-}:
-    raise SystemExit(f"{sys.argv[3]} must use exact custom deployment branches")
-if payload.get("total_count", len(policies)) != 1:
-    raise SystemExit(f"{sys.argv[3]} must contain exactly one deployment branch policy")
-if [(policy.get("name"), policy.get("type")) for policy in policies] != [("main", "branch")]:
-    raise SystemExit(f"{sys.argv[3]} must permit only main")
-PY
+  python3 "${environment_policy_helper}" verify \
+    "${environment_json}" "${environment_branches_json}" \
+    "${environment_name}" "${environment_snapshot_json}"
 }
 
 configure_environment release-nginx

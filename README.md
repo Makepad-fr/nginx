@@ -136,7 +136,16 @@ the reviewed files are on `main`:
 
 The paths are illustrative. In normal operation stream token and key fields
 directly from their canonical Proton Pass items with `pass-cli`; do not print
-or leave them in a workspace. The runner reconciler fails closed if the
+or leave them in a workspace. Before changing either environment's branch
+policy, the repository-policy bootstrap reads its current protection rules and
+preserves supported wait timers, exact user/team reviewer IDs, and the
+prevent-self-review setting. It does not add reviewers to an unprotected
+environment. Duplicate or unknown protection rules, duplicate environment or
+branch-policy records, malformed IDs, and truncated API inventories stop the
+bootstrap; the final read-back must reproduce the preserved protections and
+permit only exact `main`.
+
+The runner reconciler fails closed if the
 attestor or deploy host is absent, a persistent runner has the JIT-only label,
 any runner exposes unexpected custom labels, or Nginx can reach a repository or
 organization runner outside the two selected-workflow groups.

@@ -150,6 +150,7 @@ jit_reconciler="${repo_root}/scripts/reconcile-nginx-ci-jit.sh"
 attestation_dispatch="${repo_root}/scripts/dispatch-ci-attestation.mjs"
 runner_policy="${repo_root}/scripts/configure-runner-groups.sh"
 github_policy="${repo_root}/scripts/configure-github-ci-policy.sh"
+environment_policy="${repo_root}/scripts/github_environment_policy.py"
 secret_scope_policy="${repo_root}/scripts/migrate-openpanel-secret-scope.sh"
 controller_wrapper="${repo_root}/scripts/run-nginx-ci-queue-controller.sh"
 controller_unit="${repo_root}/host/systemd/nginx-ci-queue-controller.service"
@@ -213,6 +214,7 @@ for required_file in \
   "${attestation_dispatch}" \
   "${runner_policy}" \
   "${github_policy}" \
+  "${environment_policy}" \
   "${secret_scope_policy}" \
   "${controller_wrapper}" \
   "${controller_unit}" \
@@ -284,6 +286,7 @@ for expected in \
   'tests/pr-ci-check.test.mjs' \
   'tests/test_base_image_integrity.py' \
   'tests/test_ci_release_gate.py' \
+  'tests/test_environment_policy.py' \
   'tests/test_secret_scope_policy.py'; do
   grep -Fq -- "${expected}" "${candidate_harness}" || {
     echo "Nginx protected candidate harness is missing: ${expected}" >&2
@@ -403,6 +406,10 @@ done
 for expected in \
   'configure_environment release-nginx' \
   'configure_environment production' \
+  'environment-presence' \
+  '"${environment_policy_helper}" request' \
+  '--input "${environment_request_json}"' \
+  '"${environment_policy_helper}" verify' \
   'NGINX_CI_LAUNCHER_APP_SENDER_ID' \
   'NGINX_CI_APPROVED_BASE_IMAGE_SHA256' \
   'NGINX_CI_ATTESTATION_PUBLIC_KEY' \

@@ -72,7 +72,7 @@ done
 for expected in \
   'pull_request:' \
   "github.event.pull_request.head.repo.full_name == github.repository" \
-  "github.event.pull_request.base.ref == 'main'" \
+  'github.event.pull_request.draft == false' \
   'runs-on: [self-hosted, Linux, X64, makepad]' \
   'persist-credentials: false'; do
   grep -Fq -- "${expected}" "${ci_workflow}" || {

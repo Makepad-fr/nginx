@@ -1,5 +1,5 @@
 self-hosted-runner:
   labels:
-    - makepad
-    - makepad-nginx-ci
+    - makepad-nginx-ci-ephemeral
+    - makepad-nginx-ci-attestor
     - makepad-nginx-deploy

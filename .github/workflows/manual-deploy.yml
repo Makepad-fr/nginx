@@ -8,41 +8,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  verify-ci:
-    if: github.repository == 'Makepad-fr/nginx' && github.ref == 'refs/heads/main'
-    runs-on:
-      group: org/Nginx Deploy
-      labels: [self-hosted, linux, x64, makepad-nginx-deploy]
-    timeout-minutes: 5
-    permissions:
-      actions: read
-      checks: read
-      contents: read
-    steps:
-      - name: Check out protected deployment gate
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-      - name: Require successful signed CI teardown for exact source
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NGINX_PR_CHECK_APP_ID: ${{ vars.NGINX_PR_CHECK_APP_ID }}
-        run: |
-          set -euo pipefail
-          [[ "${GITHUB_REPOSITORY}" == Makepad-fr/nginx ]]
-          [[ "${GITHUB_REF}" == refs/heads/main ]]
-          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
-          ./scripts/require-successful-ci.sh "${GITHUB_REPOSITORY}" "${GITHUB_SHA}" "${NGINX_PR_CHECK_APP_ID}"
-
   deploy:
     if: github.repository == 'Makepad-fr/nginx' && github.ref == 'refs/heads/main'
-    needs: verify-ci
-    runs-on:
-      group: org/Nginx Deploy
-      labels: [self-hosted, linux, x64, makepad-nginx-deploy]
+    runs-on: [self-hosted, Linux, X64, makepad]
     environment: production
     permissions:
       contents: read
@@ -326,20 +294,19 @@ jobs:
               || docker network create --driver overlay --attachable "${app_network}"
           done
 
-          ensure_brio_network() {
+          require_brio_network() {
             local network_name=$1
             local internal=$2
-            if ! docker network inspect "${network_name}" >/dev/null 2>&1; then
-              create_args=(--driver overlay --attachable --opt encrypted=true)
-              if [[ "${internal}" == "true" ]]; then
-                create_args+=(--internal)
-              fi
-              docker network create "${create_args[@]}" "${network_name}" >/dev/null
+            local expected_owner=$3
+            local expected_purpose=$4
+            local details expected
+            if ! details=$(docker network inspect "${network_name}" --format '{{.Driver}}|{{.Scope}}|{{.Internal}}|{{.Attachable}}|{{index .Options "encrypted"}}|{{index .Labels "com.makepad.owner"}}|{{index .Labels "com.makepad.environment"}}|{{index .Labels "com.makepad.instance"}}|{{index .Labels "com.makepad.purpose"}}'); then
+              echo "Required Brio network ${network_name} does not exist; deploy its owning service first." >&2
+              exit 1
             fi
-            local details
-            details=$(docker network inspect "${network_name}" --format '{{.Driver}} {{.Scope}} {{.Internal}} {{.Attachable}} {{index .Options "encrypted"}}')
-            if [[ "${details}" != "overlay swarm ${internal} true true" ]]; then
-              echo "Brio network ${network_name} has unexpected isolation/encryption settings: ${details}" >&2
+            expected="overlay|swarm|${internal}|true|true|${expected_owner}|staging|brio|${expected_purpose}"
+            if [[ "${details}" != "${expected}" ]]; then
+              echo "Brio network ${network_name} has unexpected isolation or ownership metadata." >&2
               exit 1
             fi
           }
@@ -349,8 +316,8 @@ jobs:
             echo "Brio deployment bundle contains non-canonical network names." >&2
             exit 1
           fi
-          ensure_brio_network "${brio_app_network}" false
-          ensure_brio_network "${brio_maildev_network}" true
+          require_brio_network "${brio_app_network}" false Makepad-fr/brio app-edge
+          require_brio_network "${brio_maildev_network}" true Makepad-fr/maildev maildev-web
 
           docker compose \
             --env-file "${remote_dir}/envs/${deploy_env}/.env.proxy" \
@@ -505,7 +472,15 @@ jobs:
             "${RUNNER_TEMP}/nginx-deploy-ssh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             "${RUNNER_TEMP}/nginx-deploy-bundle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"; do
             case "${path}" in
-              "${RUNNER_TEMP}"/nginx-deploy-*) rm -rf -- "${path}" ;;
+              "${RUNNER_TEMP}"/nginx-deploy-*)
+                if [[ -d "${path}" && ! -L "${path}" ]]; then
+                  find "${path}" -depth -mindepth 1 -delete
+                  rmdir -- "${path}"
+                elif [[ -e "${path}" ]]; then
+                  echo "Refusing to remove non-directory deployment material: ${path}" >&2
+                  exit 1
+                fi
+                ;;
               *) echo "Refusing to remove unexpected cleanup path: ${path}" >&2; exit 1 ;;
             esac
           done

@@ -26,6 +26,16 @@ printf 'pass-cli' >>"${FAKE_AUDIT_LOG}"
 printf ' %q' "$@" >>"${FAKE_AUDIT_LOG}"
 printf '\n' >>"${FAKE_AUDIT_LOG}"
 
+increment_count() {
+  local name=$1
+  local path="${FAKE_COUNT_DIR}/${name}"
+  local count=0
+  [[ ! -f "${path}" ]] || count=$(<"${path}")
+  count=$((count + 1))
+  printf '%s\n' "${count}" >"${path}"
+  printf '%s' "${count}"
+}
+
 if [[ "${1:-}" == test ]]; then
   exit 0
 fi
@@ -43,6 +53,10 @@ titles = {
     for entry in payload[group]
 }
 missing = os.environ.get("FAKE_MISSING_ITEM", "")
+if os.environ.get("FAKE_MISSING_ITEM_AFTER_WRITE") and pathlib.Path(
+    os.environ["FAKE_DESTINATION_STATE"]
+).stat().st_size:
+    missing = os.environ["FAKE_MISSING_ITEM_AFTER_WRITE"]
 items = [{"title": title} for title in sorted(titles) if title != missing]
 duplicate = os.environ.get("FAKE_DUPLICATE_ITEM", "")
 if duplicate:
@@ -63,6 +77,7 @@ if [[ "${1:-} ${2:-}" == 'item view' ]]; then
   done
   [[ -n "${item}" && -n "${field}" ]]
   printf 'pass-view item=%s field=%s\n' "${item}" "${field}" >>"${FAKE_AUDIT_LOG}"
+  view_count=$(increment_count "pass-view-${field}")
   [[ "${field}" != "${FAKE_MISSING_FIELD:-}" ]] || exit 1
   if [[ "${field}" == "${FAKE_EMPTY_FIELD:-}" ]]; then
     exit 0
@@ -73,6 +88,17 @@ if [[ "${1:-} ${2:-}" == 'item view' ]]; then
   fi
   if [[ "${field}" == "${FAKE_INVALID_SEMANTIC_FIELD:-}" ]]; then
     printf '%s\n' 'invalid-value'
+    exit 0
+  fi
+  if [[ "${field}" == "${FAKE_SOURCE_DRIFT_FIELD:-}" && \
+    "${view_count}" -ge "${FAKE_SOURCE_DRIFT_AFTER:-3}" ]]; then
+    if [[ "${field}" == private_key ]]; then
+      printf '%s\n' '-----BEGIN OPENSSH PRIVATE KEY-----' \
+        'RFJJRlRFRF9QUklWQVRFX0tFWV9NQVRFUklBTA==' \
+        '-----END OPENSSH PRIVATE KEY-----'
+    else
+      printf '%s\n' 'drifted-valid-network'
+    fi
     exit 0
   fi
   case "${item}/${field}" in
@@ -97,7 +123,7 @@ if [[ "${1:-} ${2:-}" == 'item view' ]]; then
     'Nginx · production overlay names/brio_staging') printf '%s\n' 'makepad_brio_staging_app' ;;
     'Nginx · production overlay names/maildev_brio_staging_web') printf '%s\n' 'makepad_brio_staging_maildev_web' ;;
     'Nginx · production overlay names/'*) printf 'NEVER_PRINT_VALUE_%s\n' "${field}" ;;
-    'Nginx · CI Checks App/app_id') printf '%s\n' '10001' ;;
+    'Nginx · CI Checks App/app_id') printf '%s\n' "${FAKE_CHECK_APP_ID:-10001}" ;;
     'Nginx · CI Launcher App/bot_user_id') printf '%s\n' '10002' ;;
     'Nginx · CI base image approval/qcow2_sha256') printf '%064d\n' 0 | tr '0' 'a' ;;
     'Nginx · CI hypervisor attestation/ed25519_public_key')
@@ -137,19 +163,91 @@ if [[ "${1:-}" == api ]]; then
   path=${*: -1}
   if [[ "${path}" == repos/Makepad-fr/nginx ]]; then
     count=$(increment_count repository)
-    repository_id=424242
-    [[ "${FAKE_REPOSITORY_ID_CHANGE:-0}" != 1 || "${count}" == 1 ]] || repository_id=424243
+    repository_id=1200300778
+    [[ "${FAKE_REPOSITORY_ID_CHANGE:-0}" != 1 || "${count}" == 1 ]] || repository_id=1200300779
     default_branch=main
     [[ "${FAKE_INVALID_REPOSITORY:-0}" != 1 ]] || default_branch=develop
-    printf '{"id":%s,"full_name":"Makepad-fr/nginx","private":false,"visibility":"public","default_branch":"%s","fork":false,"archived":false,"disabled":false,"owner":{"login":"Makepad-fr","type":"Organization"}}\n' \
-      "${repository_id}" "${default_branch}"
+    fork=false
+    [[ "${FAKE_REPOSITORY_FORK:-0}" != 1 ]] || fork=true
+    printf '{"id":%s,"full_name":"Makepad-fr/nginx","private":false,"visibility":"public","default_branch":"%s","fork":%s,"archived":false,"disabled":false,"owner":{"login":"Makepad-fr","type":"Organization"}}\n' \
+      "${repository_id}" "${default_branch}" "${fork}"
+    exit 0
+  fi
+  if [[ "${path}" == repos/Makepad-fr/nginx/branches/main/protection ]]; then
+    count=$(increment_count main-protection)
+    strict=true
+    app_id=10001
+    [[ "${FAKE_INVALID_MAIN_POLICY:-0}" != 1 ]] || strict=false
+    if [[ "${FAKE_MAIN_POLICY_CHANGE:-0}" == 1 && \
+      "${count}" -ge "${FAKE_MAIN_POLICY_CHANGE_AFTER:-2}" ]]; then
+      app_id=10003
+    fi
+    printf '{"required_status_checks":{"strict":%s,"contexts":["policy-and-render"],"checks":[{"context":"policy-and-render","app_id":%s}]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":true,"require_last_push_approval":true,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"required_signatures":{"enabled":true},"required_linear_history":{"enabled":true},"required_conversation_resolution":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}\n' \
+      "${strict}" "${app_id}"
+    exit 0
+  fi
+  if [[ "${path}" == repos/Makepad-fr/nginx/actions/permissions/workflow ]]; then
+    count=$(increment_count workflow-policy)
+    permissions=read
+    [[ "${FAKE_INVALID_WORKFLOW_POLICY:-0}" != 1 ]] || permissions=write
+    if [[ "${FAKE_WORKFLOW_POLICY_CHANGE:-0}" == 1 && "${count}" != 1 ]]; then
+      permissions=write
+    fi
+    printf '{"default_workflow_permissions":"%s","can_approve_pull_request_reviews":false}\n' \
+      "${permissions}"
+    exit 0
+  fi
+  if [[ "${path}" == repos/Makepad-fr/nginx/actions/variables/* ]]; then
+    destination=${path##*/}
+    value_file="${FAKE_VALUE_DIR}/repository-variables__variable__${destination}"
+    [[ -f "${value_file}" ]] || exit 90
+    python3 -c '
+import json
+import os
+import pathlib
+import sys
+
+value = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+if os.environ.get("FAKE_VARIABLE_READBACK_DRIFT") == sys.argv[1]:
+    value += "-drift"
+print(json.dumps({"name": sys.argv[1], "value": value}, separators=(",", ":")))
+' "${destination}" "${value_file}"
+    exit 0
+  fi
+  if [[ "${path}" == repos/Makepad-fr/nginx/environments/*/variables/* ]]; then
+    remainder=${path#repos/Makepad-fr/nginx/environments/}
+    environment=${remainder%%/*}
+    destination=${path##*/}
+    value_file="${FAKE_VALUE_DIR}/${environment}__variable__${destination}"
+    [[ -f "${value_file}" ]] || exit 90
+    python3 -c '
+import json
+import os
+import pathlib
+import sys
+
+value = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+if os.environ.get("FAKE_VARIABLE_READBACK_DRIFT") == sys.argv[1]:
+    value += "-drift"
+print(json.dumps({"name": sys.argv[1], "value": value}, separators=(",", ":")))
+' "${destination}" "${value_file}"
     exit 0
   fi
   if [[ "${path}" == */deployment-branch-policies\?per_page=100 ]]; then
+    remainder=${path#repos/Makepad-fr/nginx/environments/}
+    environment=${remainder%%/*}
+    count=$(increment_count "branch-policy-${environment}")
+    policy_id=90
+    [[ "${environment}" != release-nginx ]] || policy_id=91
+    if [[ "${FAKE_BRANCH_POLICY_ID_CHANGE:-}" == "${environment}" && "${count}" != 1 ]]; then
+      policy_id=$((policy_id + 20))
+    fi
     if [[ "${FAKE_INVALID_PROTECTION:-0}" == 1 ]]; then
-      printf '%s\n' '{"total_count":1,"branch_policies":[{"id":91,"name":"release/*","type":"branch"}]}'
+      printf '{"total_count":1,"branch_policies":[{"id":%s,"name":"release/*","type":"branch"}]}\n' \
+        "${policy_id}"
     else
-      printf '%s\n' '{"total_count":1,"branch_policies":[{"id":90,"name":"main","type":"branch"}]}'
+      printf '{"total_count":1,"branch_policies":[{"id":%s,"name":"main","type":"branch"}]}\n' \
+        "${policy_id}"
     fi
     exit 0
   fi
@@ -161,12 +259,16 @@ if [[ "${1:-}" == api ]]; then
     if [[ "${FAKE_ENVIRONMENT_ID_CHANGE:-}" == "${environment}" && "${count}" != 1 ]]; then
       environment_id=$((environment_id + 20))
     fi
+    rule_id=10
+    if [[ "${FAKE_ENVIRONMENT_RULE_ID_CHANGE:-}" == "${environment}" && "${count}" != 1 ]]; then
+      rule_id=30
+    fi
     wait_timer=30
     if [[ "${FAKE_CHANGED_POLICY:-}" == "${environment}" && "${count}" != 1 ]]; then
       wait_timer=31
     fi
-    printf '{"id":%s,"name":"%s","protection_rules":[{"id":10,"type":"branch_policy"},{"id":11,"type":"wait_timer","wait_timer":%s},{"id":12,"type":"required_reviewers","prevent_self_review":true,"reviewers":[{"type":"Team","reviewer":{"id":81}},{"type":"User","reviewer":{"id":82}}]}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}\n' \
-      "${environment_id}" "${environment}" "${wait_timer}"
+    printf '{"id":%s,"name":"%s","protection_rules":[{"id":%s,"type":"branch_policy"},{"id":11,"type":"wait_timer","wait_timer":%s},{"id":12,"type":"required_reviewers","prevent_self_review":true,"reviewers":[{"type":"Team","reviewer":{"id":81}},{"type":"User","reviewer":{"id":82}}]}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}\n' \
+      "${environment_id}" "${environment}" "${rule_id}" "${wait_timer}"
     exit 0
   fi
   exit 96
@@ -234,13 +336,16 @@ fi
 
 [[ "${operation}" == set && -n "${destination}" ]]
 [[ "${destination}" != "${FAKE_FAIL_SET:-}" ]] || exit 93
+value_file="${FAKE_VALUE_DIR}/${scope}__${kind}__${destination}"
 bytes=$(python3 -c '
+import pathlib
 import sys
 value = sys.stdin.buffer.read()
 if not value:
     raise SystemExit("missing streamed value")
+pathlib.Path(sys.argv[1]).write_bytes(value)
 print(len(value))
-')
+' "${value_file}")
 printf '%s|%s|%s\n' "${scope}" "${kind}" "${destination}" >>"${FAKE_DESTINATION_STATE}"
 printf 'gh-set scope=%s kind=%s name=%s bytes=%s\n' \
   "${scope}" "${kind}" "${destination}" "${bytes}" >>"${FAKE_AUDIT_LOG}"
@@ -261,6 +366,8 @@ class CredentialSyncTests(unittest.TestCase):
         self.state = self.temp / "destinations.state"
         self.counts = self.temp / "counts"
         self.counts.mkdir(mode=0o700)
+        self.values = self.temp / "values"
+        self.values.mkdir(mode=0o700)
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -278,6 +385,8 @@ class CredentialSyncTests(unittest.TestCase):
         self.state.write_text("", encoding="utf-8")
         shutil.rmtree(self.counts)
         self.counts.mkdir(mode=0o700)
+        shutil.rmtree(self.values)
+        self.values.mkdir(mode=0o700)
         environment = os.environ.copy()
         environment.update(
             {
@@ -286,6 +395,7 @@ class CredentialSyncTests(unittest.TestCase):
                 "FAKE_AUDIT_LOG": str(self.audit),
                 "FAKE_COUNT_DIR": str(self.counts),
                 "FAKE_DESTINATION_STATE": str(self.state),
+                "FAKE_VALUE_DIR": str(self.values),
                 "FAKE_INVENTORY": str(inventory),
             }
         )
@@ -312,6 +422,16 @@ class CredentialSyncTests(unittest.TestCase):
 
     def test_inventory_is_exact_and_keeps_private_host_material_out_of_github(self) -> None:
         payload = json.loads(INVENTORY.read_text(encoding="utf-8"))
+        self.assertEqual(
+            payload["repository"],
+            {
+                "id": 1200300778,
+                "fullName": "Makepad-fr/nginx",
+                "visibility": "public",
+                "defaultBranch": "main",
+                "fork": False,
+            },
+        )
         production = {
             (entry["kind"], entry["destination"], entry["item"], entry["field"])
             for entry in payload["githubEnvironmentEntries"]
@@ -349,6 +469,21 @@ class CredentialSyncTests(unittest.TestCase):
         }
         self.assertEqual(production, expected_production)
         self.assertEqual(
+            {
+                (entry["kind"], entry["destination"], entry["item"], entry["field"])
+                for entry in payload["githubEnvironmentEntries"]
+                if entry["scope"] == "release-nginx"
+            },
+            {
+                (
+                    "secret",
+                    "NGINX_PR_CHECK_APP_PRIVATE_KEY",
+                    "Nginx · CI Checks App",
+                    "private_key",
+                )
+            },
+        )
+        self.assertEqual(
             payload["repositoryVariables"],
             [
                 {"destination": "NGINX_PR_CHECK_APP_ID", "item": "Nginx · CI Checks App", "field": "app_id"},
@@ -364,6 +499,85 @@ class CredentialSyncTests(unittest.TestCase):
         }
         self.assertNotIn(("Nginx · CI Launcher App", "private_key"), github_sources)
         self.assertNotIn(("Nginx · CI hypervisor attestation", "ed25519_private_key"), github_sources)
+        expected_host_entries = {
+            (
+                "operator-verification",
+                "Checks App private-key fingerprint",
+                "Nginx · CI Checks App",
+                "private_key_fingerprint",
+            ),
+            (
+                "ci-hypervisor-root-setting",
+                "/etc/makepad/nginx-ci/controller.env:NGINX_CI_LAUNCHER_APP_ID",
+                "Nginx · CI Launcher App",
+                "app_id",
+            ),
+            (
+                "ci-hypervisor-root-setting",
+                "/etc/makepad/nginx-ci/controller.env:NGINX_CI_LAUNCHER_APP_INSTALLATION_ID",
+                "Nginx · CI Launcher App",
+                "installation_id",
+            ),
+            (
+                "ci-hypervisor-root-file",
+                "/etc/makepad/nginx-ci/launcher-app-private-key.pem",
+                "Nginx · CI Launcher App",
+                "private_key",
+            ),
+            (
+                "operator-verification",
+                "Launcher App private-key fingerprint",
+                "Nginx · CI Launcher App",
+                "private_key_fingerprint",
+            ),
+            (
+                "ci-hypervisor-root-file",
+                "/etc/makepad/nginx-ci/attestation-private-key.pem",
+                "Nginx · CI hypervisor attestation",
+                "ed25519_private_key",
+            ),
+            (
+                "operator-verification",
+                "Attestation public-key fingerprint",
+                "Nginx · CI hypervisor attestation",
+                "public_key_fingerprint",
+            ),
+            (
+                "ci-hypervisor-root-setting",
+                "/etc/makepad/nginx-ci/controller.env:NGINX_CI_BASE_IMAGE_SHA256",
+                "Nginx · CI base image approval",
+                "qcow2_sha256",
+            ),
+            (
+                "ci-hypervisor-root-setting",
+                "/etc/makepad/nginx-ci/controller.env:NGINX_CI_REPOSITORY_ID",
+                "Nginx · CI base image approval",
+                "repository_id",
+            ),
+            (
+                "host-root-file",
+                "NGINX_HOST_ALERT_URL_FILE",
+                "Nginx · host control alert webhook",
+                "url",
+            ),
+            (
+                "operator-stdin",
+                "configure-github-ci-policy.sh standard input",
+                "Nginx · GitHub repository policy bootstrap",
+                "repository_admin_token",
+            ),
+            (
+                "operator-stdin",
+                "configure-runner-groups.sh standard input",
+                "Nginx · GitHub runner policy bootstrap",
+                "organization_runner_admin_token",
+            ),
+        }
+        observed_host_entries = {
+            (entry["boundary"], entry["destination"], entry["item"], entry["field"])
+            for entry in payload["hostEntries"]
+        }
+        self.assertEqual(observed_host_entries, expected_host_entries)
         host_sources = {(entry["item"], entry["field"]) for entry in payload["hostEntries"]}
         self.assertIn(("Nginx · CI Launcher App", "private_key"), host_sources)
         self.assertIn(("Nginx · CI hypervisor attestation", "ed25519_private_key"), host_sources)
@@ -420,6 +634,22 @@ class CredentialSyncTests(unittest.TestCase):
         )
         self.assertIn("protection=invalid-or-ambiguous", result.stdout)
 
+    def test_repository_main_and_workflow_policy_gate_precedes_value_reads(self) -> None:
+        cases = (
+            {"FAKE_INVALID_REPOSITORY": "1"},
+            {"FAKE_REPOSITORY_FORK": "1"},
+            {"FAKE_INVALID_MAIN_POLICY": "1"},
+            {"FAKE_INVALID_WORKFLOW_POLICY": "1"},
+        )
+        for overrides in cases:
+            with self.subTest(overrides=overrides):
+                result = self.run_helper(
+                    "--sync", "--scope", "production", expected=1, **overrides
+                )
+                self.assertIn("policy=invalid-or-changed", result.stdout)
+                self.assertFalse(any("item view" in line for line in self.audit_lines()))
+                self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
+
     def test_sync_completes_all_value_preflights_before_any_write(self) -> None:
         result = self.run_helper(
             "--sync", "--scope", "production", expected=1,
@@ -442,6 +672,12 @@ class CredentialSyncTests(unittest.TestCase):
             FAKE_INVALID_SEMANTIC_FIELD="qcow2_sha256",
         )
         self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
+        result = self.run_helper(
+            "--sync", "--scope", "repository-variables", expected=1,
+            FAKE_CHECK_APP_ID="20002",
+        )
+        self.assertIn("required Proton field is missing, empty, invalid", result.stdout)
+        self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
 
     def test_policy_or_identity_change_after_value_preflight_blocks_all_writes(self) -> None:
         result = self.run_helper(
@@ -463,6 +699,76 @@ class CredentialSyncTests(unittest.TestCase):
         )
         self.assertIn("repository identity or environment protection changed", result.stdout)
         self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
+        for overrides in (
+            {"FAKE_MAIN_POLICY_CHANGE": "1"},
+            {"FAKE_WORKFLOW_POLICY_CHANGE": "1"},
+            {"FAKE_BRANCH_POLICY_ID_CHANGE": "production"},
+            {"FAKE_ENVIRONMENT_RULE_ID_CHANGE": "production"},
+        ):
+            with self.subTest(overrides=overrides):
+                result = self.run_helper(
+                    "--sync", "--scope", "production", expected=1, **overrides
+                )
+                self.assertIn("changed during preflight", result.stdout)
+                self.assertTrue(any(line.startswith("pass-view ") for line in self.audit_lines()))
+                self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
+
+        result = self.run_helper(
+            "--sync",
+            "--scope",
+            "release-nginx",
+            expected=1,
+            FAKE_MAIN_POLICY_CHANGE="1",
+            FAKE_MAIN_POLICY_CHANGE_AFTER="4",
+        )
+        self.assertIn("changed during final read-back", result.stdout)
+        self.assertEqual(
+            sum(line.startswith("gh-set ") for line in self.audit_lines()), 1
+        )
+        self.assertNotIn("SYNC_COMPLETE", result.stdout)
+
+    def test_source_drift_after_preflight_or_write_never_reports_completion(self) -> None:
+        result = self.run_helper(
+            "--sync",
+            "--scope",
+            "production",
+            expected=1,
+            FAKE_SOURCE_DRIFT_FIELD="private_key",
+            FAKE_SOURCE_DRIFT_AFTER="2",
+        )
+        self.assertIn("source changed or GitHub rejected", result.stdout)
+        self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
+        self.assertNotIn("SYNC_COMPLETE", result.stdout)
+
+        payload = json.loads(INVENTORY.read_text(encoding="utf-8"))
+        expected_writes = sum(
+            entry["scope"] == "production"
+            for entry in payload["githubEnvironmentEntries"]
+        )
+        result = self.run_helper(
+            "--sync",
+            "--scope",
+            "production",
+            expected=1,
+            FAKE_SOURCE_DRIFT_FIELD="prod",
+            FAKE_SOURCE_DRIFT_AFTER="3",
+        )
+        self.assertIn("Proton source changed after write", result.stdout)
+        self.assertEqual(
+            sum(line.startswith("gh-set ") for line in self.audit_lines()),
+            expected_writes,
+        )
+        self.assertNotIn("SYNC_COMPLETE", result.stdout)
+
+        result = self.run_helper(
+            "--sync",
+            "--scope",
+            "release-nginx",
+            expected=1,
+            FAKE_MISSING_ITEM_AFTER_WRITE="Nginx · CI Checks App",
+        )
+        self.assertIn("a Proton source item changed during sync", result.stdout)
+        self.assertNotIn("SYNC_COMPLETE", result.stdout)
 
     def test_production_sync_streams_only_the_selected_scope_and_reads_back(self) -> None:
         payload = json.loads(INVENTORY.read_text(encoding="utf-8"))
@@ -486,6 +792,10 @@ class CredentialSyncTests(unittest.TestCase):
         }
         self.assertEqual(preflight_fields, {entry["field"] for entry in expected_entries})
         self.assertFalse(any(" --body" in line or " -b" in line or " -f" in line for line in lines))
+        self.assertEqual(
+            result.stdout.count("VARIABLE_READBACK scope=production"),
+            sum(entry["kind"] == "variable" for entry in expected_entries),
+        )
         helper_source = HELPER.read_text(encoding="utf-8")
         self.assertNotIn("gh secret delete", helper_source)
         self.assertNotIn("gh variable delete", helper_source)
@@ -506,6 +816,17 @@ class CredentialSyncTests(unittest.TestCase):
             writes[0],
         )
         self.assertIn("protection=exact-main-preserved identity=stable", result.stdout)
+
+    def test_public_variable_value_readback_is_exact(self) -> None:
+        result = self.run_helper(
+            "--sync",
+            "--scope",
+            "production",
+            expected=1,
+            FAKE_VARIABLE_READBACK_DRIFT="NGINX_DEPLOY_HOST",
+        )
+        self.assertIn("GitHub public variable failed exact read-back", result.stdout)
+        self.assertNotIn("SYNC_COMPLETE", result.stdout)
 
     def test_unexpected_name_blocks_before_any_value_read_or_write(self) -> None:
         result = self.run_helper(
@@ -533,6 +854,36 @@ class CredentialSyncTests(unittest.TestCase):
         )
         self.assertIn("duplicate repository variable", result.stdout)
         self.assertEqual(self.audit.read_text(encoding="utf-8"), "")
+
+    def test_every_inventory_tuple_is_immutable_before_authentication(self) -> None:
+        copied_root = self.temp / "tuple-candidate"
+        (copied_root / "deploy").mkdir(parents=True)
+        (copied_root / "scripts").mkdir()
+        copied_helper = copied_root / "scripts" / HELPER.name
+        copied_policy = copied_root / "scripts" / "github_environment_policy.py"
+        shutil.copy2(HELPER, copied_helper)
+        shutil.copy2(ROOT / "scripts" / "github_environment_policy.py", copied_policy)
+        copied_inventory = copied_root / "deploy" / INVENTORY.name
+        original = json.loads(INVENTORY.read_text(encoding="utf-8"))
+
+        mutations = (
+            ("environment", "githubEnvironmentEntries", 0),
+            ("repository", "repositoryVariables", 0),
+            ("host", "hostEntries", 0),
+        )
+        for label, group, offset in mutations:
+            with self.subTest(group=label):
+                payload = json.loads(json.dumps(original))
+                payload[group][offset]["field"] += "_drift"
+                copied_inventory.write_text(json.dumps(payload), encoding="utf-8")
+                result = self.run_helper(
+                    "--check",
+                    expected=1,
+                    helper=copied_helper,
+                    inventory=copied_inventory,
+                )
+                self.assertIn("tuple mapping does not match", result.stdout)
+                self.assertEqual(self.audit.read_text(encoding="utf-8"), "")
 
 
 if __name__ == "__main__":

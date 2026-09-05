@@ -63,7 +63,10 @@ Before the first GitHub write, sync mode:
    timer, reviewer IDs, and `prevent_self_review` setting;
 6. proves each selected Proton item title is unique; and
 7. reads every selected field through an anonymous pipe into a size/NUL/empty
-   validator that discards the bytes.
+   validator that discards the bytes. The same validator enforces the pinned
+   deployment coordinates, canonical Brio network names, Docker-name syntax,
+   positive App IDs, lowercase image digest, Ed25519 public-key envelope, and
+   expected private-key/known-hosts structure.
 
 It then re-reads GitHub identity, names, and the complete preserved protection
 snapshot. Only after those checks pass does it read each Proton field a second

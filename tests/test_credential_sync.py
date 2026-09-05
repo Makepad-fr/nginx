@@ -71,7 +71,42 @@ if [[ "${1:-} ${2:-}" == 'item view' ]]; then
     python3 -c 'import sys; sys.stdout.write("S" * 50000)'
     exit 0
   fi
-  printf 'NEVER_PRINT_VALUE_%s\n' "${field}"
+  if [[ "${field}" == "${FAKE_INVALID_SEMANTIC_FIELD:-}" ]]; then
+    printf '%s\n' 'invalid-value'
+    exit 0
+  fi
+  case "${item}/${field}" in
+    'Nginx · production deployment/private_key')
+      printf '%s\n' '-----BEGIN OPENSSH PRIVATE KEY-----' \
+        'TkVWRVJfUFJJTlRfVkFMVUVfU1NIX0tFWQ==' \
+        '-----END OPENSSH PRIVATE KEY-----'
+      ;;
+    'Nginx · CI Checks App/private_key')
+      printf '%s\n' '-----BEGIN PRIVATE KEY-----' \
+        'TkVWRVJfUFJJTlRfVkFMVUVfQ0hFQ0tTX0tFWQ==' \
+        '-----END PRIVATE KEY-----'
+      ;;
+    'Nginx · production deployment/known_hosts')
+      printf '%s\n' 'proxy.example ssh-ed25519 TkVWRVJfUFJJTlRfVkFMVUVfSE9TVF9LRVk='
+      ;;
+    'Nginx · production deployment/host') printf '%s\n' '135.181.141.31' ;;
+    'Nginx · production deployment/port') printf '%s\n' '22' ;;
+    'Nginx · production deployment/user') printf '%s\n' 'makepad' ;;
+    'Nginx · production deployment/remote_dir') printf '%s\n' '/srv/makepad/nginx' ;;
+    'Nginx · production deployment/stack_name') printf '%s\n' 'makepad-edge' ;;
+    'Nginx · production overlay names/brio_staging') printf '%s\n' 'makepad_brio_staging_app' ;;
+    'Nginx · production overlay names/maildev_brio_staging_web') printf '%s\n' 'makepad_brio_staging_maildev_web' ;;
+    'Nginx · production overlay names/'*) printf 'NEVER_PRINT_VALUE_%s\n' "${field}" ;;
+    'Nginx · CI Checks App/app_id') printf '%s\n' '10001' ;;
+    'Nginx · CI Launcher App/bot_user_id') printf '%s\n' '10002' ;;
+    'Nginx · CI base image approval/qcow2_sha256') printf '%064d\n' 0 | tr '0' 'a' ;;
+    'Nginx · CI hypervisor attestation/ed25519_public_key')
+      printf '%s\n' '-----BEGIN PUBLIC KEY-----' \
+        'MCowBQYDK2VwAyEAAAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=' \
+        '-----END PUBLIC KEY-----'
+      ;;
+    *) exit 92 ;;
+  esac
   exit 0
 fi
 exit 97
@@ -202,7 +237,7 @@ fi
 bytes=$(python3 -c '
 import sys
 value = sys.stdin.buffer.read()
-if not value or not value.startswith(b"NEVER_PRINT_VALUE_"):
+if not value:
     raise SystemExit("missing streamed value")
 print(len(value))
 ')
@@ -402,6 +437,11 @@ class CredentialSyncTests(unittest.TestCase):
             FAKE_OVERSIZE_FIELD="private_key",
         )
         self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
+        result = self.run_helper(
+            "--sync", "--scope", "repository-variables", expected=1,
+            FAKE_INVALID_SEMANTIC_FIELD="qcow2_sha256",
+        )
+        self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
 
     def test_policy_or_identity_change_after_value_preflight_blocks_all_writes(self) -> None:
         result = self.run_helper(
@@ -460,9 +500,11 @@ class CredentialSyncTests(unittest.TestCase):
 
         result = self.run_helper("--sync", "--scope", "release-nginx", expected=0)
         writes = [line for line in self.audit_lines() if line.startswith("gh-set ")]
-        self.assertEqual(writes, [
-            "gh-set scope=release-nginx kind=secret name=NGINX_PR_CHECK_APP_PRIVATE_KEY bytes=29"
-        ])
+        self.assertEqual(len(writes), 1)
+        self.assertIn(
+            "scope=release-nginx kind=secret name=NGINX_PR_CHECK_APP_PRIVATE_KEY",
+            writes[0],
+        )
         self.assertIn("protection=exact-main-preserved identity=stable", result.stdout)
 
     def test_unexpected_name_blocks_before_any_value_read_or_write(self) -> None:

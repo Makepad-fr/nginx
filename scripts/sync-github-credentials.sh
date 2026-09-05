@@ -568,11 +568,16 @@ report_status() {
 
 filter_value() {
   local operation=$1
+  local destination=$2
   python3 -c '
+import base64
+import binascii
+import re
 import sys
 
 operation = sys.argv[1]
-maximum = int(sys.argv[2])
+destination = sys.argv[2]
+maximum = int(sys.argv[3])
 value = sys.stdin.buffer.read(maximum + 2)
 if len(value) > maximum + 1:
     raise SystemExit("value exceeds the GitHub size bound")
@@ -586,11 +591,93 @@ if len(value) > maximum:
     raise SystemExit("value exceeds the GitHub size bound")
 if b"\x00" in value:
     raise SystemExit("value contains NUL")
+
+try:
+    text = value.decode("utf-8")
+except UnicodeDecodeError as error:
+    raise SystemExit("value is not valid UTF-8") from error
+if any(character in text for character in "\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f"):
+    raise SystemExit("value contains a forbidden control character")
+
+
+def validate_pem(labels):
+    lines = text.splitlines()
+    matching = [label for label in labels if lines and lines[0] == f"-----BEGIN {label}-----"]
+    if len(matching) != 1 or lines[-1] != f"-----END {matching[0]}-----":
+        raise SystemExit("private key has an unexpected PEM envelope")
+    try:
+        decoded = base64.b64decode("".join(lines[1:-1]), validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise SystemExit("private key has invalid base64") from error
+    if len(decoded) < 16:
+        raise SystemExit("private key payload is too short")
+
+
+if destination == "DEPLOY_SSH_PRIVATE_KEY":
+    validate_pem(("OPENSSH PRIVATE KEY", "PRIVATE KEY", "RSA PRIVATE KEY"))
+elif destination == "NGINX_PR_CHECK_APP_PRIVATE_KEY":
+    validate_pem(("PRIVATE KEY", "RSA PRIVATE KEY"))
+elif destination == "DEPLOY_SSH_KNOWN_HOSTS":
+    for line in text.splitlines():
+        parts = line.split()
+        algorithm_offset = 2 if parts and parts[0].startswith("@") else 1
+        if len(parts) <= algorithm_offset + 1 or not re.fullmatch(
+            r"(?:ssh-|ecdsa-|sk-)[A-Za-z0-9@._+-]+", parts[algorithm_offset]
+        ):
+            raise SystemExit("known_hosts contains an invalid entry")
+        try:
+            base64.b64decode(parts[algorithm_offset + 1], validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise SystemExit("known_hosts contains invalid key data") from error
+elif destination.startswith("MAKEPAD_PROXY_") and destination.endswith("_APP_NETWORK") or destination == "MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK":
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}", text):
+        raise SystemExit("Docker network name is invalid")
+    exact_networks = {
+        "MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK": "makepad_brio_staging_app",
+        "MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK": "makepad_brio_staging_maildev_web",
+    }
+    if destination in exact_networks and text != exact_networks[destination]:
+        raise SystemExit("Brio network name is not canonical")
+elif destination in {
+    "NGINX_DEPLOY_HOST": "135.181.141.31",
+    "NGINX_DEPLOY_PORT": "22",
+    "NGINX_DEPLOY_USER": "makepad",
+    "NGINX_DEPLOY_REMOTE_DIR": "/srv/makepad/nginx",
+    "NGINX_DEPLOY_STACK_NAME": "makepad-edge",
+}:
+    expected = {
+        "NGINX_DEPLOY_HOST": "135.181.141.31",
+        "NGINX_DEPLOY_PORT": "22",
+        "NGINX_DEPLOY_USER": "makepad",
+        "NGINX_DEPLOY_REMOTE_DIR": "/srv/makepad/nginx",
+        "NGINX_DEPLOY_STACK_NAME": "makepad-edge",
+    }[destination]
+    if text != expected:
+        raise SystemExit("deployment coordinate does not match protected policy")
+elif destination in {"NGINX_PR_CHECK_APP_ID", "NGINX_CI_LAUNCHER_APP_SENDER_ID"}:
+    if not re.fullmatch(r"[1-9][0-9]*", text):
+        raise SystemExit("GitHub numeric identity is invalid")
+elif destination == "NGINX_CI_APPROVED_BASE_IMAGE_SHA256":
+    if not re.fullmatch(r"[a-f0-9]{64}", text):
+        raise SystemExit("approved base-image digest is invalid")
+elif destination == "NGINX_CI_ATTESTATION_PUBLIC_KEY":
+    lines = text.splitlines()
+    if not lines or lines[0] != "-----BEGIN PUBLIC KEY-----" or lines[-1] != "-----END PUBLIC KEY-----":
+        raise SystemExit("attestation public key has an unexpected PEM envelope")
+    try:
+        der = base64.b64decode("".join(lines[1:-1]), validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise SystemExit("attestation public key has invalid base64") from error
+    if len(der) != 44 or not der.startswith(bytes.fromhex("302a300506032b6570032100")):
+        raise SystemExit("attestation public key is not Ed25519 SubjectPublicKeyInfo")
+else:
+    raise SystemExit("destination has no approved value validator")
+
 if operation == "emit":
     sys.stdout.buffer.write(value)
 elif operation != "check":
     raise SystemExit("invalid filter operation")
-' "${operation}" "${max_value_bytes}"
+' "${operation}" "${destination}" "${max_value_bytes}"
 }
 
 load_proton_item_names
@@ -618,7 +705,7 @@ ulimit -c 0 || die 'could not disable process core dumps before handling credent
 for index in "${!entry_scope[@]}"; do
   if ! pass-cli item view --vault-name "${vault}" \
     --item-title "${entry_item[index]}" --field "${entry_field[index]}" 2>/dev/null |
-    filter_value check >/dev/null; then
+    filter_value check "${entry_destination[index]}" >/dev/null; then
     die "required Proton field is missing, empty, invalid, or oversized: ${entry_item[index]}/${entry_field[index]}"
   fi
   printf 'SOURCE_FIELD item=%s field=%s status=ready\n' \
@@ -641,7 +728,7 @@ for index in "${!entry_scope[@]}"; do
   if [[ "${target}" == environment && "${kind}" == secret ]]; then
     if ! pass-cli item view --vault-name "${vault}" \
       --item-title "${entry_item[index]}" --field "${entry_field[index]}" 2>/dev/null |
-      filter_value emit |
+      filter_value emit "${destination}" |
       GH_PROMPT_DISABLED=1 gh secret set "${destination}" --repo "${repository}" \
         --env "${scope}" --app actions >/dev/null 2>&1; then
       die "GitHub rejected ${scope}/${kind}/${destination}"
@@ -649,7 +736,7 @@ for index in "${!entry_scope[@]}"; do
   elif [[ "${target}" == environment && "${kind}" == variable ]]; then
     if ! pass-cli item view --vault-name "${vault}" \
       --item-title "${entry_item[index]}" --field "${entry_field[index]}" 2>/dev/null |
-      filter_value emit |
+      filter_value emit "${destination}" |
       GH_PROMPT_DISABLED=1 gh variable set "${destination}" --repo "${repository}" \
         --env "${scope}" >/dev/null 2>&1; then
       die "GitHub rejected ${scope}/${kind}/${destination}"
@@ -657,7 +744,7 @@ for index in "${!entry_scope[@]}"; do
   elif [[ "${target}" == repository && "${kind}" == variable ]]; then
     if ! pass-cli item view --vault-name "${vault}" \
       --item-title "${entry_item[index]}" --field "${entry_field[index]}" 2>/dev/null |
-      filter_value emit |
+      filter_value emit "${destination}" |
       GH_PROMPT_DISABLED=1 gh variable set "${destination}" --repo "${repository}" >/dev/null 2>&1; then
       die "GitHub rejected repository/variable/${destination}"
     fi

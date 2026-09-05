@@ -80,6 +80,10 @@ for expected in \
     exit 1
   }
 done
+grep -Fq -- 'python3 -m unittest ./tests/test_brio_nginx_control_receipt.py' "${ci_workflow}" || {
+  echo "Nginx CI does not execute the Brio live-control receipt tests." >&2
+  exit 1
+}
 if grep -Fq -- 'secrets.' "${ci_workflow}"; then
   echo "Nginx pull-request CI must not receive secrets." >&2
   exit 1

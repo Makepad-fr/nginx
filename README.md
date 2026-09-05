@@ -112,6 +112,31 @@ Canonical long-lived credentials remain in the existing Proton Pass records
 and are mirrored only to the protected GitHub environment. Repository code does
 not create, rotate, delete, or move credentials.
 
+Install the Brio release-evidence observer on the proxy host from a protected
+`main` checkout before collecting a release package:
+
+```sh
+sudo scripts/install-brio-control-receipt.sh
+```
+
+The installer atomically publishes the fixed helper at
+`/usr/local/libexec/makepad/brio-nginx-control-receipt` as root-owned mode
+`0755`. The helper emits canonical `makepad.brio.runtime-controls.v1` JSON. It
+reads only the active Swarm service/task, Brio network metadata, and rendered
+Nginx configuration; it runs `nginx -t`, makes body-free HTTPS header requests,
+and performs verified loopback TLS handshakes with each production SNI name.
+It fails closed unless the only public service ports are TCP 80/443, the exact
+Brio and MailDev route-policy digests/upstreams are active, both certificate
+chains and exact SAN sets are valid with at least seven days remaining, and
+the live responses carry the reviewed security and private/no-store headers.
+The receipt contains public certificate digests/expiry only. The helper never
+opens or emits private-key material, response bodies, cookies, query strings,
+client addresses, or upstream payloads; its `nginx -t` subprocess performs the
+same certificate/key readability check as deployment. It performs no reload,
+rollout, or provider mutation.
+
+### Credential and variable inventory
+
 The exact Proton-to-GitHub map is recorded in
 `deploy/credential-inventory.json`. Run the names-only audit with
 `./scripts/sync-github-credentials.sh --check --scope production`. The bounded
@@ -146,4 +171,5 @@ docker run --rm --network none \
 ./scripts/test-runtrace-upload-policy.sh
 ./scripts/test-brio-staging-policy.sh
 python3 -m unittest ./tests/test_credential_sync.py
+python3 -m unittest ./tests/test_brio_nginx_control_receipt.py
 ```

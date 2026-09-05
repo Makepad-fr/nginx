@@ -15,3 +15,4 @@
 ## Documentation
 
 - Keep `README.md` and workflow instructions aligned with network names, certificate paths, and deployment steps.
+- Keep `deploy/credential-inventory.json`, `docs/credential-sync.md`, and every workflow credential reference aligned. Root/controller material must never be mirrored into GitHub Actions.

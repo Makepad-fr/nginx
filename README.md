@@ -195,6 +195,7 @@ Required environment secrets:
 - `MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK`
 - `MAKEPAD_PROXY_EVIDELLA_APP_NETWORK`
 - `MAKEPAD_PROXY_OPENPANEL_APP_NETWORK`
+- `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK`
 - `MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK`
 - `MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK`
 
@@ -222,6 +223,9 @@ rejects any target drift before opening an SSH connection.
 Canonical long-lived values are created or rotated in Proton Pass first. Mirror
 only the exact field to its documented GitHub environment or root-only host
 boundary; compare stored fingerprints and IDs without printing secret values.
+The machine-readable source is `deploy/credential-inventory.json`; use
+`scripts/sync-github-credentials.sh --check` for a names-only audit and see
+`docs/credential-sync.md` for bounded one-scope sync and rollout instructions.
 
 | Proton Pass item | Exact fields | GitHub or host mirror | Authority boundary |
 | --- | --- | --- | --- |
@@ -282,7 +286,9 @@ narrowing the environment creates either an outage or a wider credential
 boundary.
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
-`MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is optional and defaults to `makepad_runtrace_prod_app`, matching the Runtrace app deployment template; set it only if the Runtrace app stack uses a different overlay network name.
+`MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is required. Keep its canonical value in
+the `runtrace` field of `Nginx · production overlay names`; the deployment
+workflow has no literal fallback around the protected inventory.
 
 ## TLS
 

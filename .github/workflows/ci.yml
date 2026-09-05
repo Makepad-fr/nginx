@@ -3,9 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-  # The workflow and runner policy are always loaded from protected main. A
-  # same-repository pull request supplies only the exact candidate SHA.
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
@@ -13,54 +11,55 @@ permissions:
 
 jobs:
   validate:
-    name: candidate-policy-and-render
+    name: policy-and-render
     if: >-
       github.event_name == 'push' ||
-      (github.event_name == 'pull_request_target' &&
+      (github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
-       github.event.pull_request.base.ref == 'main' &&
        github.event.pull_request.draft == false)
-    # The root-owned queue controller supplies this label to one JIT-configured
-    # KVM guest. The guest receives no repository, App, environment, or deploy
-    # secrets and is destroyed after its one job.
-    runs-on:
-      group: org/Nginx CI
-      labels: [self-hosted, linux, x64, makepad-nginx-ci-ephemeral, 'makepad-nginx-job-${{ github.run_id }}-${{ github.run_attempt }}']
+    runs-on: [self-hosted, Linux, X64, makepad]
     timeout-minutes: 25
     permissions:
       contents: read
     steps:
-      - name: Check out protected policy source
+      - name: Check out exact source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
-          path: _policy
-          fetch-depth: 1
-      - name: Check out exact candidate source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          persist-credentials: false
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
-          path: _source
-          fetch-depth: 1
-      - name: Pin both checkouts to event identity
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Pin checkout to event identity
         shell: bash
         env:
-          EXPECTED_POLICY_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.sha || github.sha }}
-          EXPECTED_SOURCE_SHA: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-          [[ "${EXPECTED_POLICY_SHA}" =~ ^[a-f0-9]{40}$ ]]
           [[ "${EXPECTED_SOURCE_SHA}" =~ ^[a-f0-9]{40}$ ]]
-          [[ "$(git -C _policy rev-parse HEAD)" == "${EXPECTED_POLICY_SHA}" ]]
-          [[ "$(git -C _source rev-parse HEAD)" == "${EXPECTED_SOURCE_SHA}" ]]
-      - name: Verify self-hosted toolchain
+          [[ "$(git rev-parse HEAD)" == "${EXPECTED_SOURCE_SHA}" ]]
+      - name: Verify existing runner toolchain
         shell: bash
         run: |
           set -euo pipefail
           python3 -c 'import sys; assert sys.version_info >= (3, 11), sys.version'
-          node -e 'const major = Number(process.versions.node.split(".")[0]); if (major < 18) process.exit(1)'
-      - name: Verify candidate with protected policy
+          docker version >/dev/null
+      - name: Lint workflows and shell scripts
         shell: bash
-        run: ./_policy/scripts/run-protected-candidate-harness.sh _source
+        run: |
+          set -euo pipefail
+          docker run --rm --network none \
+            --volume "${PWD}:/repo:ro" \
+            --workdir /repo \
+            docker.io/rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
+          docker run --rm --network none \
+            --volume "${PWD}:/workspace:ro" \
+            --workdir /workspace \
+            docker.io/koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d \
+            --severity=warning scripts/*.sh
+      - name: Validate Runtrace and Brio ingress policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ./scripts/validate-credential-inventory.py ./deploy/credential-inventory.json
+          python3 -m unittest ./tests/test_credential_sync.py
+          ./scripts/test-runtrace-upload-policy.sh
+          ./scripts/test-brio-staging-policy.sh

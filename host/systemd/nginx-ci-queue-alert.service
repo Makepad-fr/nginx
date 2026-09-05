@@ -1,0 +1,12 @@
+[Unit]
+Description=Alert on Nginx JIT queue-controller failure
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/etc/makepad/nginx-ci/alert.env
+ExecStart=/usr/local/libexec/makepad/send-nginx-host-alert nginx-ci-queue-controller
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict

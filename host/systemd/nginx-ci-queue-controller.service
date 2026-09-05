@@ -1,0 +1,22 @@
+[Unit]
+Description=Nginx supervised one-job JIT queue controller
+After=network-online.target libvirtd.service
+Wants=network-online.target
+Requires=libvirtd.service
+OnFailure=nginx-ci-queue-alert.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/makepad/nginx-ci/controller.env
+ExecStart=/opt/makepad/nginx-ci/current/scripts/run-nginx-ci-queue-controller.sh
+Restart=on-failure
+RestartSec=15s
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/lock /run /var/lib/makepad/nginx-ci /var/lib/libvirt
+
+[Install]
+WantedBy=multi-user.target

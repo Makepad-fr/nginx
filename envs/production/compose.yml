@@ -70,3 +70,9 @@ networks:
   runtrace_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}
+  brio_staging_app:
+    external: true
+    name: ${MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK:?set MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK}
+  maildev_brio_staging_web:
+    external: true
+    name: ${MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK:?set MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK}

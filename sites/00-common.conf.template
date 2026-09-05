@@ -22,3 +22,20 @@ log_format runtrace_json escape=json '{'
 limit_req_zone $binary_remote_addr zone=runtrace_general:10m rate=30r/s;
 limit_req_zone $binary_remote_addr zone=runtrace_telemetry:10m rate=2r/s;
 limit_conn_zone $binary_remote_addr zone=runtrace_connections:10m;
+
+# Brio logs carry only operational timing/correlation fields. They deliberately
+# omit host, URI/query, client address, referrer, user agent, and identity data.
+log_format brio_privacy escape=json '{'
+    '"timestamp":"$time_iso8601",'
+    '"request_id":"$request_id",'
+    '"method":"$request_method",'
+    '"status":"$status",'
+    '"response_bytes":"$body_bytes_sent",'
+    '"request_time_seconds":"$request_time",'
+    '"upstream_status":"$upstream_status",'
+    '"upstream_response_time_seconds":"$upstream_response_time"'
+    '}';
+
+limit_req_zone $binary_remote_addr zone=brio_staging_general:10m rate=15r/s;
+limit_req_zone $binary_remote_addr zone=brio_staging_apply:10m rate=5r/m;
+limit_conn_zone $binary_remote_addr zone=brio_staging_connections:10m;

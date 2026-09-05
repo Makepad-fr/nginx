@@ -1,0 +1,90 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${BRIO_STAGING_SERVER_NAME};
+
+    access_log /dev/stdout brio_privacy;
+    error_log /dev/stderr crit;
+
+    location /.well-known/acme-challenge/ {
+        root ${CATWLK_ACME_WEBROOT};
+        default_type text/plain;
+    }
+
+    location / {
+        return 301 https://${BRIO_STAGING_SERVER_NAME}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${BRIO_STAGING_SERVER_NAME};
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    ssl_certificate ${BRIO_STAGING_TLS_CERT_FILE};
+    ssl_certificate_key ${BRIO_STAGING_TLS_KEY_FILE};
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:BRIO_SSL:10m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    access_log /dev/stdout brio_privacy;
+    # Lower-severity request errors can include a client address and full URI.
+    # Keep privacy-sensitive staging traffic out of the generic error stream.
+    error_log /dev/stderr crit;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    # A same-origin referrer is required by Brio's CSRF verifier for browsers
+    # that serialize navigation-form Origin as null under `no-referrer`.
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(self), usb=()" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Cache-Control "private, no-store" always;
+    add_header X-Request-ID $request_id always;
+
+    client_max_body_size 1m;
+    client_body_timeout 20s;
+    limit_req_status 429;
+    limit_conn_status 429;
+    limit_conn brio_staging_connections 30;
+
+    location = /applications {
+        limit_req zone=brio_staging_apply burst=2 nodelay;
+        set $brio_staging_upstream ${BRIO_STAGING_UPSTREAM};
+        proxy_pass $brio_staging_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+        proxy_send_timeout 30s;
+        proxy_set_header Connection "";
+        proxy_set_header Host ${BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host ${BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Request-ID $request_id;
+    }
+
+    location / {
+        limit_req zone=brio_staging_general burst=40 nodelay;
+        set $brio_staging_upstream ${BRIO_STAGING_UPSTREAM};
+        proxy_pass $brio_staging_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_set_header Connection "";
+        proxy_set_header Host ${BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host ${BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Request-ID $request_id;
+    }
+}

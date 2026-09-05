@@ -111,11 +111,25 @@ class FakeRunner:
         self.networks = {
             "makepad_brio_staging_app": [{
                 "Id": "app-id", "Name": "makepad_brio_staging_app", "Driver": "overlay",
-                "Scope": "swarm", "Attachable": True, "Internal": False, "Options": {"encrypted": "true"},
+                "Scope": "swarm", "Attachable": True, "Ingress": False, "Internal": False,
+                "Options": {"encrypted": "true"},
+                "Labels": {
+                    "com.makepad.owner": "Makepad-fr/brio",
+                    "com.makepad.environment": "staging",
+                    "com.makepad.instance": "brio",
+                    "com.makepad.purpose": "app-edge",
+                },
             }],
             "makepad_brio_staging_maildev_web": [{
                 "Id": "mail-id", "Name": "makepad_brio_staging_maildev_web", "Driver": "overlay",
-                "Scope": "swarm", "Attachable": True, "Internal": True, "Options": {"encrypted": "true"},
+                "Scope": "swarm", "Attachable": True, "Ingress": False, "Internal": True,
+                "Options": {"encrypted": "true"},
+                "Labels": {
+                    "com.makepad.owner": "Makepad-fr/maildev",
+                    "com.makepad.environment": "staging",
+                    "com.makepad.instance": "brio",
+                    "com.makepad.purpose": "maildev-web",
+                },
             }],
         }
 
@@ -147,6 +161,25 @@ class BrioNginxControlReceiptTests(unittest.TestCase):
         self.assertEqual(receipt["provider"], "nginx")
         self.assertEqual(receipt["subject"], "brio-staging")
         self.assertEqual(receipt["controls"]["exposure"], {"publicTCPPorts": [80, 443]})
+        self.assertEqual(
+            receipt["controls"]["networks"],
+            [
+                {
+                    "encrypted": True,
+                    "internal": False,
+                    "name": "makepad_brio_staging_app",
+                    "owner": "Makepad-fr/brio",
+                    "purpose": "app-edge",
+                },
+                {
+                    "encrypted": True,
+                    "internal": True,
+                    "name": "makepad_brio_staging_maildev_web",
+                    "owner": "Makepad-fr/maildev",
+                    "purpose": "maildev-web",
+                },
+            ],
+        )
         self.assertEqual(receipt["controls"]["routes"]["application"]["upstream"], MODULE.BRIO_UPSTREAM)
         self.assertEqual(receipt["controls"]["routes"]["mailCapture"]["authUpstream"], MODULE.MAILDEV_AUTH_UPSTREAM)
         serialized = json.dumps(receipt, sort_keys=True, separators=(",", ":"))
@@ -189,6 +222,12 @@ class BrioNginxControlReceiptTests(unittest.TestCase):
         runner = FakeRunner()
         MODULE.validate_networks(runner, self.service, self.container)
         runner.networks["makepad_brio_staging_maildev_web"][0]["Internal"] = False
+        with self.assertRaisesRegex(MODULE.ReceiptError, "isolation"):
+            MODULE.validate_networks(runner, self.service, self.container)
+
+    def test_network_ownership_drift_fails_closed(self) -> None:
+        runner = FakeRunner()
+        runner.networks["makepad_brio_staging_app"][0]["Labels"]["com.makepad.owner"] = "other"
         with self.assertRaisesRegex(MODULE.ReceiptError, "isolation"):
             MODULE.validate_networks(runner, self.service, self.container)
 

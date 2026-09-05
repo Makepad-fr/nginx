@@ -129,9 +129,11 @@ It fails closed unless the only public service ports are TCP 80/443, the exact
 Brio and MailDev route-policy digests/upstreams are active, both certificate
 chains and exact SAN sets are valid with at least seven days remaining, and
 the live responses carry the reviewed security and private/no-store headers.
-The receipt contains public certificate digests/expiry only; it never reads or
-emits a private key, response body, cookie, query string, client address, or
-upstream payload, and it performs no reload, rollout, or provider mutation.
+The receipt contains public certificate digests/expiry only. The helper never
+opens or emits private-key material, response bodies, cookies, query strings,
+client addresses, or upstream payloads; its `nginx -t` subprocess performs the
+same certificate/key readability check as deployment. It performs no reload,
+rollout, or provider mutation.
 
 ### Credential and variable inventory
 
@@ -169,4 +171,5 @@ docker run --rm --network none \
 ./scripts/test-runtrace-upload-policy.sh
 ./scripts/test-brio-staging-policy.sh
 python3 -m unittest ./tests/test_credential_sync.py
+python3 -m unittest ./tests/test_brio_nginx_control_receipt.py
 ```

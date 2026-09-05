@@ -22,14 +22,22 @@ MAILDEV_HOST = "maildev-brio-staging.makepad.fr"
 BRIO_UPSTREAM = "http://brio-staging-app:8080"
 MAILDEV_UPSTREAM = "http://maildev-brio-staging:1080"
 MAILDEV_AUTH_UPSTREAM = "http://maildev-brio-staging-auth:4180"
-BRIO_CONFIG_SHA256 = "8aba5e966ca436fbc9c1258bd997bb68d2f1705381caa797d6f91535f808c165"
+BRIO_CONFIG_SHA256 = "b03afcc8fd4fcccbe4c07c9c9712124f6ce8c0c03d52c66c55f68cdf8e5eecac"
 MAILDEV_CONFIG_SHA256 = "f6ba6c58b75f836dca38a12430b1b15adec574709c2ff12c524bf7b31edd6a1a"
 MAX_OUTPUT_BYTES = 512 * 1024
 APPLICATION_CSP = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
 PROXY_PERMISSIONS = "camera=(), geolocation=(), microphone=(), payment=(self), usb=()"
-NETWORKS = {
-    "makepad_brio_staging_app": False,
-    "makepad_brio_staging_maildev_web": True,
+NETWORKS: dict[str, dict[str, str | bool]] = {
+    "makepad_brio_staging_app": {
+        "internal": False,
+        "owner": "Makepad-fr/brio",
+        "purpose": "app-edge",
+    },
+    "makepad_brio_staging_maildev_web": {
+        "internal": True,
+        "owner": "Makepad-fr/maildev",
+        "purpose": "maildev-web",
+    },
 }
 
 
@@ -112,18 +120,24 @@ def validate_networks(runner: Runner, service: dict[str, Any], container: dict[s
         if isinstance(item, dict)
     }
     attached = set(((container.get("NetworkSettings") or {}).get("Networks") or {}))
-    for name, internal in NETWORKS.items():
+    for name, expected in NETWORKS.items():
         values = runner.docker_json("network", "inspect", name)
         require(isinstance(values, list) and len(values) == 1 and isinstance(values[0], dict),
                 f"Nginx Brio network {name} was not unique")
         network = values[0]
+        labels = network.get("Labels") or {}
         require(
             network.get("Name") == name
             and network.get("Driver") == "overlay"
             and network.get("Scope") == "swarm"
             and network.get("Attachable") is True
-            and network.get("Internal") is internal
+            and network.get("Ingress") is False
+            and network.get("Internal") is expected["internal"]
             and (network.get("Options") or {}).get("encrypted") == "true"
+            and labels.get("com.makepad.owner") == expected["owner"]
+            and labels.get("com.makepad.environment") == "staging"
+            and labels.get("com.makepad.instance") == "brio"
+            and labels.get("com.makepad.purpose") == expected["purpose"]
             and network.get("Id") in targets
             and name in attached,
             f"Nginx Brio network {name} attachment or isolation drifted",
@@ -305,6 +319,16 @@ def normalize_control_receipt(
                     "xRobotsTag": "noindex, nofollow, noarchive",
                 },
             },
+            "networks": [
+                {
+                    "encrypted": True,
+                    "internal": expected["internal"],
+                    "name": name,
+                    "owner": expected["owner"],
+                    "purpose": expected["purpose"],
+                }
+                for name, expected in sorted(NETWORKS.items())
+            ],
             "routes": {
                 "application": {
                     "hostname": BRIO_HOST,

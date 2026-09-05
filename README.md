@@ -223,9 +223,12 @@ rejects any target drift before opening an SSH connection.
 Canonical long-lived values are created or rotated in Proton Pass first. Mirror
 only the exact field to its documented GitHub environment or root-only host
 boundary; compare stored fingerprints and IDs without printing secret values.
-The machine-readable source is `deploy/credential-inventory.json`; use
-`scripts/sync-github-credentials.sh --check` for a names-only audit and see
-`docs/credential-sync.md` for bounded one-scope sync and rollout instructions.
+The machine-readable source pins numeric repository ID `1200300778` and every
+source/destination tuple in `deploy/credential-inventory.json`. Use
+`scripts/sync-github-credentials.sh --check` for a names-only audit. A bounded
+sync exact-compares post-write Proton fields and public GitHub variables while
+keeping GitHub secret read-back names-only; see `docs/credential-sync.md` for
+the trust gates and rollout instructions.
 
 | Proton Pass item | Exact fields | GitHub or host mirror | Authority boundary |
 | --- | --- | --- | --- |

@@ -2,8 +2,11 @@
 
 `deploy/credential-inventory.json` is the reviewed, machine-readable map from
 the shared Proton Pass vault `Makepad` to the GitHub and root-host boundaries
-used by `Makepad-fr/nginx`. It does not contain values. Repository code never
-creates, rotates, exports, or deletes a provider credential.
+used by numeric repository `1200300778` (`Makepad-fr/nginx`). The helper also
+contains the complete expected tuple set, so a syntactically valid inventory
+edit cannot silently redirect a destination to another item or field. The
+inventory does not contain values. Repository code never creates, rotates,
+exports, or deletes a provider credential.
 
 Run this helper only from a clean checkout of reviewed protected code on a
 trusted administrator workstation. Never run it from a pull-request checkout
@@ -29,7 +32,8 @@ An audit can also be bounded to one scope:
 Check mode calls `pass-cli item list` for active item titles. It never calls
 `pass-cli item view`; therefore it cannot read a Proton field value. It asks
 GitHub CLI to emit only destination names and reads public repository and
-environment-protection metadata. Output is limited to names, classifications,
+environment-protection metadata. It also verifies protected `main` and the
+Actions workflow-token policy. Output is limited to names, classifications,
 policy state, and counts. A host destination is reported as
 `operator-managed`; the helper never connects to that host.
 
@@ -55,30 +59,46 @@ unknown, repeated, or host-only write scope.
 
 Before the first GitHub write, sync mode:
 
-1. validates the strict inventory schema and immutable repository/vault names;
-2. binds the public repository to its exact numeric ID and protected `main`;
-3. rejects every repository Actions secret and every unlisted destination;
-4. binds each selected environment to its exact numeric ID;
-5. proves that only exact branch `main` may deploy while snapshotting the wait
-   timer, reviewer IDs, and `prevent_self_review` setting;
-6. proves each selected Proton item title is unique; and
-7. reads every selected field through an anonymous pipe into a size/NUL/empty
-   validator that discards the bytes. The same validator enforces the pinned
-   deployment coordinates, canonical Brio network names, Docker-name syntax,
-   positive App IDs, lowercase image digest, Ed25519 public-key envelope, and
-   expected private-key/known-hosts structure.
+1. validates the strict inventory schema, the complete immutable tuple map,
+   and the exact vault name;
+2. pins the repository to numeric ID `1200300778`, exact public visibility,
+   `fork: false`, and default branch `main`;
+3. requires protected `main` to have strict App-bound `policy-and-render`, one
+   approving review with the configured review safeguards, signed commits,
+   administrator enforcement, linear history, conversation resolution, and
+   no force pushes or deletion;
+4. requires the Actions workflow token to default to read-only and forbids it
+   from approving pull requests;
+5. rejects every repository Actions secret and every unlisted destination;
+6. binds each selected environment, its protection rules, and its sole exact
+   `main` deployment branch policy to their numeric IDs for the whole run;
+7. proves each selected Proton item title is unique; and
+8. reads every selected field through an anonymous pipe into a size/NUL/empty
+   validator. The same validator enforces the pinned deployment coordinates,
+   canonical Brio network names, Docker-name syntax, positive App IDs,
+   lowercase image digest, Ed25519 public-key envelope, and expected
+   private-key/known-hosts structure. It retains only a per-run keyed SHA-256
+   fingerprint for subsequent exact comparison. The Checks App source ID must
+   equal the App ID already bound to protected `main`.
 
-It then re-reads GitHub identity, names, and the complete preserved protection
-snapshot. Only after those checks pass does it read each Proton field a second
-time and stream the bytes through the same validator directly to
-`gh secret set` or `gh variable set` on standard input. A value never enters a
-command argument, exported environment variable, shell variable, log, dotenv
-file, or temporary file. Shell tracing and CLI debug output are disabled, the
-temporary directory is owner-only and contains metadata only, and process core
-dumps are disabled before field reads.
+It then re-reads the selected Proton item titles plus GitHub identity, names,
+protected-main policy, Actions policy, resource IDs, and the complete preserved
+environment-protection snapshot. Only after those checks pass does it read each
+Proton field a second time. A private in-process validator exact-compares the
+keyed fingerprint before it starts `gh`, then supplies the already validated
+bytes to `gh secret set` or `gh variable set` through standard input. A value
+never enters a command argument, exported environment variable, shell variable,
+log, dotenv file, or temporary file. Shell tracing and CLI debug output are
+disabled, the temporary directory is owner-only and contains only metadata and
+per-run keyed fingerprints, and process core dumps are disabled before field
+reads.
 
-The final read-back must reproduce the same numeric identities, exact-main
-policy, wait timer, reviewers, self-review setting, and destination name set.
+After all writes, the helper re-reads every selected Proton item and field and
+exact-compares it with the preflight fingerprint. The final GitHub read-back
+must reproduce the same numeric identities, protected-main and Actions policy,
+environment settings, exact branch-policy IDs, and complete destination name
+sets. Every public variable value is exact-compared with its Proton source;
+secret read-back remains names-only because GitHub never returns secret values.
 The helper never creates or edits an environment policy and never deletes a
 GitHub name. Resolve a reported legacy name through a separately reviewed,
 exact-name migration such as `migrate-openpanel-secret-scope.sh`.
@@ -138,8 +158,8 @@ base-image file.
 ### Repository variables
 
 These are public or non-secret integrity anchors needed before a job can enter
-an environment. They are still streamed on standard input and read back by
-name only.
+an environment. They are still streamed on standard input, then read back by
+exact name and value without printing the value.
 
 | Proton item and field | Repository variable |
 | --- | --- |

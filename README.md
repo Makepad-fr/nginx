@@ -248,8 +248,16 @@ neither allowance permits an all-repositories App installation.
 | `Nginx · host control alert webhook` | `url` | Root-owned mode-`0400` file named by `NGINX_HOST_ALERT_URL_FILE` | HTTPS operations channel independent of GitHub; never expose it to a workflow or guest. |
 | `Nginx · production deployment` | `private_key`, `known_hosts`, `host`, `port`, `user`, `remote_dir`, `stack_name` | `production` secrets `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`; `NGINX_DEPLOY_*` environment variables | Dedicated non-root deploy account and exact pinned proxy host. |
 | `Nginx · production overlay names` | `prod`, `canary`, `alerteconso`, `le_petit_coin`, `vif`, `makepad_landing`, `evidella`, `openpanel`, `runtrace`, `brio_staging`, `maildev_brio_staging_web` | Matching `production` `MAKEPAD_PROXY_*_APP_NETWORK` secrets | Network identifiers only; retain their current secret aliases for workflow compatibility. |
+| Name-only retained destinations | No Proton field and no write authority | `production` secrets `MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK`, `MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK` | Exact compatibility names for open PR #8 and a potentially deployed predecessor. The Brio reconciler reports but never reads, writes, or deletes them. |
 | `Nginx · GitHub repository policy bootstrap` | `repository_admin_token` | Stream once to `configure-github-ci-policy.sh`; never store in Actions | Short-lived repository Administration, Actions, Environments, Variables, and Metadata authority; revoke after read-back. |
 | `Nginx · GitHub runner policy bootstrap` | `organization_runner_admin_token` | Stream once to `configure-runner-groups.sh`; never store in Actions | Short-lived organization runner-group authority plus repository Metadata read; revoke after read-back. |
+
+The two name-only retained destinations are a bounded migration exception, not
+ambient unmanaged state. `MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK` is consumed
+by PR #8's deployment workflow and production Compose override; the earlier
+`MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK` may still identify an already
+deployed route. Keep both until the unrelated route owner proves the runtime
+migration or decommission. Adding any other name still blocks reconciliation.
 
 GitHub requires repository `Contents: write` for
 `POST /repos/Makepad-fr/nginx/dispatches`; that is the sole reason the Launcher

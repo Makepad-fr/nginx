@@ -111,6 +111,19 @@ The helper never creates or edits an environment policy and never deletes a
 GitHub name. Resolve a reported legacy name through a separately reviewed,
 exact-name migration such as `migrate-openpanel-secret-scope.sh`.
 
+Two exact `production` secret names are inventoried separately as name-only
+retained destinations:
+
+- `MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK`
+- `MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK`
+
+They belong to the unrelated route work in open PR #8 (including a potentially
+deployed predecessor), not to Brio. The helper reports whether each name is
+present but has no Proton source mapping or write path for either one. It never
+deletes them. Any other unlisted name remains a fail-closed error; remove these
+two exceptions only after the route owner supplies runtime migration or
+decommission evidence.
+
 GitHub does not offer a transaction spanning multiple secrets or variables. A
 provider failure after the first accepted field can leave an incomplete but
 bounded update. The helper stops immediately, reports only the failed

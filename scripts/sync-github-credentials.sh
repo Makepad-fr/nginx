@@ -93,6 +93,7 @@ status_root=$(mktemp -d "${TMPDIR:-/tmp}/nginx-credential-sync.XXXXXXXX")
 chmod 0700 "${status_root}"
 readonly status_root
 readonly github_entries_file=${status_root}/github-entries.tsv
+readonly retained_entries_file=${status_root}/retained-environment-entries.tsv
 readonly host_entries_file=${status_root}/host-entries.tsv
 readonly selected_sources_file=${status_root}/selected-sources.tsv
 readonly proton_items_file=${status_root}/proton-items.txt
@@ -121,7 +122,8 @@ trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 
 python3 - "${inventory}" "${repository}" "${vault}" "${selected_scope}" \
-  "${github_entries_file}" "${host_entries_file}" "${selected_sources_file}" <<'PY'
+  "${github_entries_file}" "${host_entries_file}" "${selected_sources_file}" \
+  "${retained_entries_file}" <<'PY'
 import json
 import pathlib
 import re
@@ -134,6 +136,7 @@ selected_scope = sys.argv[4]
 github_output = pathlib.Path(sys.argv[5])
 host_output = pathlib.Path(sys.argv[6])
 sources_output = pathlib.Path(sys.argv[7])
+retained_output = pathlib.Path(sys.argv[8])
 
 try:
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -144,13 +147,14 @@ expected_top = {
     "schemaVersion",
     "repository",
     "vault",
+    "retainedEnvironmentDestinations",
     "githubEnvironmentEntries",
     "repositoryVariables",
     "hostEntries",
 }
 if not isinstance(payload, dict) or set(payload) != expected_top:
     raise SystemExit("credential inventory has unexpected top-level keys")
-if payload["schemaVersion"] != 1:
+if payload["schemaVersion"] != 2:
     raise SystemExit("unsupported credential inventory schema")
 repository = payload["repository"]
 if not isinstance(repository, dict) or repository != {
@@ -165,10 +169,13 @@ if payload["vault"] != expected_vault:
     raise SystemExit("credential inventory targets an unexpected vault")
 
 environments = payload["githubEnvironmentEntries"]
+retained_environments = payload["retainedEnvironmentDestinations"]
 repository_variables = payload["repositoryVariables"]
 host_entries = payload["hostEntries"]
 if not isinstance(environments, list) or not environments:
     raise SystemExit("credential inventory must contain environment entries")
+if not isinstance(retained_environments, list):
+    raise SystemExit("retained environment destinations must be a list")
 if not isinstance(repository_variables, list) or not repository_variables:
     raise SystemExit("credential inventory must contain repository variables")
 if not isinstance(host_entries, list) or not host_entries:
@@ -204,6 +211,7 @@ def valid_source(entry: dict[str, object], offset: int, label: str) -> None:
 
 
 github_lines: list[str] = []
+retained_lines: list[str] = []
 host_lines: list[str] = []
 selected_sources: set[str] = set()
 seen_github: set[tuple[str, str, str]] = set()
@@ -257,6 +265,45 @@ if any(count == 0 for count in environment_counts.values()):
     raise SystemExit("every approved environment must have at least one inventory entry")
 if observed_environment_entries != expected_environment_entries:
     raise SystemExit("GitHub environment tuple mapping does not match the reviewed Nginx contract")
+
+expected_retained_entries = {
+    (
+        "production",
+        "secret",
+        "MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK",
+        "Makepad-fr/nginx PR #8 deployed predecessor",
+    ),
+    (
+        "production",
+        "secret",
+        "MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK",
+        "Makepad-fr/nginx PR #8 deployment workflow",
+    ),
+}
+observed_retained_entries: set[tuple[str, str, str, str]] = set()
+for offset, entry in enumerate(retained_environments):
+    if not isinstance(entry, dict) or set(entry) != {"scope", "kind", "destination", "consumer"}:
+        raise SystemExit(f"retained environment destination {offset} has unexpected keys")
+    scope = entry["scope"]
+    kind = entry["kind"]
+    destination = entry["destination"]
+    consumer = entry["consumer"]
+    if scope not in allowed_environment_scopes or kind not in allowed_kinds:
+        raise SystemExit(f"retained environment destination {offset} has an invalid classification")
+    if not isinstance(destination, str) or not destination_pattern.fullmatch(destination):
+        raise SystemExit(f"retained environment destination {offset} has an invalid destination")
+    if not valid_text(consumer):
+        raise SystemExit(f"retained environment destination {offset} has an invalid consumer")
+    identity = (scope, kind, destination)
+    if identity in seen_github:
+        raise SystemExit(f"retained destination overlaps a managed GitHub destination: {scope}/{kind}/{destination}")
+    seen_github.add(identity)
+    observed_retained_entries.add((scope, kind, destination, consumer))
+    if not selected_scope or selected_scope == scope:
+        retained_lines.append("\t".join((scope, kind, destination, consumer)))
+
+if observed_retained_entries != expected_retained_entries:
+    raise SystemExit("retained environment destination tuple mapping does not match the reviewed Nginx contract")
 
 seen_repository: set[str] = set()
 observed_repository_entries: set[tuple[str, str, str]] = set()
@@ -322,6 +369,7 @@ if observed_host_entries != expected_host_entries:
     raise SystemExit("host/operator tuple mapping does not match the reviewed Nginx contract")
 
 github_output.write_text("\n".join(github_lines) + ("\n" if github_lines else ""), encoding="utf-8")
+retained_output.write_text("\n".join(retained_lines) + ("\n" if retained_lines else ""), encoding="utf-8")
 host_output.write_text("\n".join(host_lines) + ("\n" if host_lines else ""), encoding="utf-8")
 sources_output.write_text("\n".join(sorted(selected_sources)) + "\n", encoding="utf-8")
 PY
@@ -346,6 +394,18 @@ while IFS=$'\t' read -r scope target kind destination item field; do
   entry_item[index]=${item}
   entry_field[index]=${field}
 done <"${github_entries_file}"
+
+declare -a retained_scope=()
+declare -a retained_kind=()
+declare -a retained_destination=()
+declare -a retained_consumer=()
+while IFS=$'\t' read -r scope kind destination consumer; do
+  index=${#retained_scope[@]}
+  retained_scope[index]=${scope}
+  retained_kind[index]=${kind}
+  retained_destination[index]=${destination}
+  retained_consumer[index]=${consumer}
+done <"${retained_entries_file}"
 
 pass-cli test >/dev/null || die 'Proton Pass is not authenticated'
 GH_PROMPT_DISABLED=1 gh auth status >/dev/null 2>&1 || die 'GitHub CLI is not authenticated'
@@ -603,6 +663,15 @@ destination_expected() {
       return 0
     fi
   done
+  if [[ "${target}" == environment ]]; then
+    for index in "${!retained_scope[@]}"; do
+      if [[ "${retained_scope[index]}" == "${scope}" && \
+        "${retained_kind[index]}" == "${kind}" && \
+        "${retained_destination[index]}" == "${destination}" ]]; then
+        return 0
+      fi
+    done
+  fi
   return 1
 }
 
@@ -704,7 +773,7 @@ missing_required_destinations=0
 unexpected_destinations=0
 report_status() {
   local item item_count status index target scope kind destination destination_file actual_name
-  local boundary host_destination field
+  local boundary host_destination field consumer
   missing_required_sources=0
   missing_required_destinations=0
   unexpected_destinations=0
@@ -739,6 +808,21 @@ report_status() {
     fi
     printf 'DESTINATION scope=%s target=%s kind=%s name=%s status=%s\n' \
       "${scope}" "${target}" "${kind}" "${destination}" "${status}"
+  done
+
+  for index in "${!retained_scope[@]}"; do
+    scope=${retained_scope[index]}
+    kind=${retained_kind[index]}
+    destination=${retained_destination[index]}
+    consumer=${retained_consumer[index]}
+    destination_file=${status_root}/github-current-environment-${scope}-${kind}.txt
+    if [[ -f "${destination_file}" ]] && grep -Fqx -- "${destination}" "${destination_file}"; then
+      status=name-only-present
+    else
+      status=absent
+    fi
+    printf 'PRESERVED_DESTINATION scope=%s kind=%s name=%s status=%s consumer=%s\n' \
+      "${scope}" "${kind}" "${destination}" "${status}" "${consumer}"
   done
 
   while IFS= read -r actual_name; do

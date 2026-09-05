@@ -425,6 +425,7 @@ class CredentialSyncTests(unittest.TestCase):
 
     def test_inventory_is_exact_and_keeps_private_host_material_out_of_github(self) -> None:
         payload = json.loads(INVENTORY.read_text(encoding="utf-8"))
+        self.assertEqual(payload["schemaVersion"], 2)
         self.assertEqual(
             payload["repository"],
             {
@@ -471,6 +472,23 @@ class CredentialSyncTests(unittest.TestCase):
             },
         }
         self.assertEqual(production, expected_production)
+        self.assertEqual(
+            payload["retainedEnvironmentDestinations"],
+            [
+                {
+                    "scope": "production",
+                    "kind": "secret",
+                    "destination": "MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK",
+                    "consumer": "Makepad-fr/nginx PR #8 deployed predecessor",
+                },
+                {
+                    "scope": "production",
+                    "kind": "secret",
+                    "destination": "MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK",
+                    "consumer": "Makepad-fr/nginx PR #8 deployment workflow",
+                },
+            ],
+        )
         self.assertEqual(
             {
                 (entry["kind"], entry["destination"], entry["item"], entry["field"])
@@ -866,6 +884,31 @@ class CredentialSyncTests(unittest.TestCase):
         self.assertFalse(any("item view" in line for line in self.audit_lines()))
         self.assertFalse(any(line.startswith("gh-set ") for line in self.audit_lines()))
 
+    def test_exact_external_consumer_names_are_preserved_but_never_written(self) -> None:
+        for destination in (
+            "MAKEPAD_PROXY_FASHION_CRAWLER_ADMIN_APP_NETWORK",
+            "MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK",
+        ):
+            with self.subTest(destination=destination):
+                result = self.run_helper(
+                    "--sync",
+                    "--scope",
+                    "production",
+                    expected=0,
+                    FAKE_UNEXPECTED_DESTINATION=destination,
+                )
+                self.assertIn(
+                    f"PRESERVED_DESTINATION scope=production kind=secret name={destination} "
+                    "status=name-only-present",
+                    result.stdout,
+                )
+                self.assertFalse(
+                    any(
+                        line.startswith("gh-set ") and f"name={destination} " in line
+                        for line in self.audit_lines()
+                    )
+                )
+
     def test_schema_ambiguity_stops_before_authentication(self) -> None:
         copied_root = self.temp / "candidate"
         (copied_root / "deploy").mkdir(parents=True)
@@ -900,14 +943,15 @@ class CredentialSyncTests(unittest.TestCase):
         original = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
         mutations = (
-            ("environment", "githubEnvironmentEntries", 0),
-            ("repository", "repositoryVariables", 0),
-            ("host", "hostEntries", 0),
+            ("environment", "githubEnvironmentEntries", 0, "field"),
+            ("repository", "repositoryVariables", 0, "field"),
+            ("host", "hostEntries", 0, "field"),
+            ("retained", "retainedEnvironmentDestinations", 0, "consumer"),
         )
-        for label, group, offset in mutations:
+        for label, group, offset, key in mutations:
             with self.subTest(group=label):
                 payload = json.loads(json.dumps(original))
-                payload[group][offset]["field"] += "_drift"
+                payload[group][offset][key] += "_drift"
                 copied_inventory.write_text(json.dumps(payload), encoding="utf-8")
                 result = self.run_helper(
                     "--check",

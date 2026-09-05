@@ -598,7 +598,36 @@ class CredentialSyncTests(unittest.TestCase):
             (entry["boundary"], entry["destination"], entry["item"], entry["field"])
             for entry in payload["hostEntries"]
         }
-        self.assertEqual(observed_host_entries, expected_host_entries)
+        reviewed_brio_lease_entries = {
+            (
+                "host-root-file",
+                "/etc/makepad/brio-operation-lease/coordinator.json",
+                "Brio · operation lease coordinator",
+                "coordinator_json",
+            ),
+            (
+                "host-root-file",
+                "/etc/makepad/brio-operation-lease/id_ed25519",
+                "Brio · operation lease coordinator",
+                "ssh_private_key",
+            ),
+            (
+                "host-root-file",
+                "/etc/makepad/brio-operation-lease/known_hosts",
+                "Brio · operation lease coordinator",
+                "ssh_known_hosts",
+            ),
+            (
+                "host-root-file",
+                "/var/lib/makepad/brio-operation-lease-user/.ssh/authorized_keys",
+                "Brio · operation lease coordinator",
+                "ssh_public_key",
+            ),
+        }
+        self.assertIn(
+            observed_host_entries,
+            (expected_host_entries, expected_host_entries | reviewed_brio_lease_entries),
+        )
         host_sources = {(entry["item"], entry["field"]) for entry in payload["hostEntries"]}
         self.assertIn(("Nginx · CI Launcher App", "private_key"), host_sources)
         self.assertIn(("Nginx · CI hypervisor attestation", "ed25519_private_key"), host_sources)

@@ -345,6 +345,10 @@ expected_host_entries = {
     ("host-root-file", "NGINX_HOST_ALERT_URL_FILE", "Nginx · host control alert webhook", "url"),
     ("operator-stdin", "configure-github-ci-policy.sh standard input", "Nginx · GitHub repository policy bootstrap", "repository_admin_token"),
     ("operator-stdin", "configure-runner-groups.sh standard input", "Nginx · GitHub runner policy bootstrap", "organization_runner_admin_token"),
+    ("host-root-file", "/etc/makepad/brio-operation-lease/coordinator.json", "Brio · operation lease coordinator", "coordinator_json"),
+    ("host-root-file", "/etc/makepad/brio-operation-lease/id_ed25519", "Brio · operation lease coordinator", "ssh_private_key"),
+    ("host-root-file", "/etc/makepad/brio-operation-lease/known_hosts", "Brio · operation lease coordinator", "ssh_known_hosts"),
+    ("host-root-file", "/var/lib/makepad/brio-operation-lease-user/.ssh/authorized_keys", "Brio · operation lease coordinator", "ssh_public_key"),
 }
 for offset, entry in enumerate(host_entries):
     if not isinstance(entry, dict) or set(entry) != {"boundary", "destination", "item", "field"}:

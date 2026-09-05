@@ -1,0 +1,66 @@
+name: Verify signed CI teardown
+
+on:
+  repository_dispatch:
+    types: [nginx-pr-ci-attestation]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: nginx-ci-attestor-${{ github.event.client_payload.attestation.run.event }}-${{ github.event.client_payload.attestation.run.id }}-${{ github.event.client_payload.attestation.run.attempt }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'Makepad-fr/nginx' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.action == 'nginx-pr-ci-attestation' &&
+      github.event.sender.type == 'Bot' &&
+      github.event.sender.id == fromJSON(vars.NGINX_CI_LAUNCHER_APP_SENDER_ID)
+    # This persistent attestor is physically separate from both the disposable
+    # KVM hypervisor and the deployment host. It has no Docker or deploy access.
+    runs-on:
+      group: org/Nginx CI
+      labels: [self-hosted, linux, x64, makepad-nginx-ci-attestor]
+    environment: release-nginx
+    timeout-minutes: 5
+    steps:
+      - name: Check out protected attestor source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Verify trusted source and Launcher App sender
+        shell: bash
+        env:
+          NGINX_EVENT_SENDER_ID: ${{ github.event.sender.id }}
+          NGINX_EXPECTED_LAUNCHER_SENDER_ID: ${{ vars.NGINX_CI_LAUNCHER_APP_SENDER_ID }}
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REPOSITORY}" == Makepad-fr/nginx ]]
+          [[ "${GITHUB_REF}" == refs/heads/main ]]
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          [[ "${NGINX_EVENT_SENDER_ID}" =~ ^[1-9][0-9]*$ ]]
+          [[ "${NGINX_EVENT_SENDER_ID}" == "${NGINX_EXPECTED_LAUNCHER_SENDER_ID}" ]]
+      - name: Verify signed teardown and publish App-bound result
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NGINX_CI_LAUNCHER_APP_SENDER_ID: ${{ vars.NGINX_CI_LAUNCHER_APP_SENDER_ID }}
+          NGINX_CI_APPROVED_BASE_IMAGE_SHA256: ${{ vars.NGINX_CI_APPROVED_BASE_IMAGE_SHA256 }}
+          NGINX_CI_ATTESTATION_PUBLIC_KEY: ${{ vars.NGINX_CI_ATTESTATION_PUBLIC_KEY }}
+          NGINX_PR_CHECK_APP_ID: ${{ vars.NGINX_PR_CHECK_APP_ID }}
+          NGINX_PR_CHECK_APP_PRIVATE_KEY: ${{ secrets.NGINX_PR_CHECK_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          : "${NGINX_PR_CHECK_APP_ID:?set protected release-nginx App ID}"
+          : "${NGINX_PR_CHECK_APP_PRIVATE_KEY:?set protected release-nginx App private key}"
+          : "${NGINX_CI_LAUNCHER_APP_SENDER_ID:?set immutable Launcher App bot ID}"
+          : "${NGINX_CI_APPROVED_BASE_IMAGE_SHA256:?set reviewed base-image digest}"
+          : "${NGINX_CI_ATTESTATION_PUBLIC_KEY:?set Ed25519 hypervisor public key}"
+          node scripts/publish-pr-ci-check.mjs

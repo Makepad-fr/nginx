@@ -43,15 +43,14 @@ jobs:
           set -euo pipefail
           python3 -c 'import sys; assert sys.version_info >= (3, 11), sys.version'
           docker version >/dev/null
-          go version >/dev/null
       - name: Lint workflows and shell scripts
         shell: bash
         run: |
           set -euo pipefail
-          tools_dir="${RUNNER_TEMP}/nginx-ci-tools"
-          install -d -m 0700 "${tools_dir}"
-          GOBIN="${tools_dir}" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
-          PATH="${tools_dir}:${PATH}" actionlint
+          docker run --rm --network none \
+            --volume "${PWD}:/repo:ro" \
+            --workdir /repo \
+            docker.io/rhysd/actionlint:1.7.7@sha256:887a259a5a534f3c4f36cb02dca341673c6089431057242cdc931e9f133147e9
           docker run --rm --network none \
             --volume "${PWD}:/workspace:ro" \
             --workdir /workspace \

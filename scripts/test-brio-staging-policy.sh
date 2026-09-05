@@ -145,6 +145,7 @@ for expected in \
   'access_log /dev/stdout brio_privacy' \
   'error_log /dev/stderr crit' \
   'add_header Referrer-Policy "strict-origin-when-cross-origin" always' \
+  'add_header Cache-Control "private, no-store" always' \
   'proxy_set_header X-Forwarded-For ""' \
   'proxy_set_header X-Real-IP ""' \
   'proxy_set_header Forwarded ""' \
@@ -254,6 +255,7 @@ for header in 'strict-transport-security:' 'x-content-type-options: nosniff' 'x-
   printf '%s\n' "${app_headers}" | tr '[:upper:]' '[:lower:]' | grep -Fq -- "$(printf '%s' "${header}" | tr '[:upper:]' '[:lower:]')"
 done
 printf '%s\n' "${mail_headers}" | tr '[:upper:]' '[:lower:]' | grep -Fq 'cache-control: private, no-store'
+printf '%s\n' "${app_headers}" | tr '[:upper:]' '[:lower:]' | grep -Fq 'cache-control: private, no-store'
 
 for protected_path in / /api/email '/socket.io/?EIO=4&transport=polling'; do
   unauthenticated=$(request maildev-brio-staging.localhost "${protected_path}" | awk 'NR == 1 {print $2}')

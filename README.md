@@ -112,6 +112,15 @@ Canonical long-lived credentials remain in the existing Proton Pass records
 and are mirrored only to the protected GitHub environment. Repository code does
 not create, rotate, delete, or move credentials.
 
+The exact Proton-to-GitHub map is recorded in
+`deploy/credential-inventory.json`. Run the names-only audit with
+`./scripts/sync-github-credentials.sh --check --scope production`. The bounded
+write mode requires an exact clean protected `main` checkout plus
+`--sync --scope production --confirm Makepad-fr/nginx:production`; it must be
+run only after explicit operator approval. It streams values through anonymous
+pipes and never manages runners, Apps, OAuth resources, or provider policy.
+See `docs/credential-sync.md` for the field map and recovery behavior.
+
 ## TLS
 
 Certificates must exist on the proxy host under `/etc/letsencrypt`. Brio
@@ -136,4 +145,5 @@ docker run --rm --network none \
   --severity=warning scripts/*.sh
 ./scripts/test-runtrace-upload-policy.sh
 ./scripts/test-brio-staging-policy.sh
+python3 -m unittest ./tests/test_credential_sync.py
 ```

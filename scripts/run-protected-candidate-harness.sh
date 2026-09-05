@@ -32,6 +32,12 @@ for required in \
   deploy/github-app-contracts.json \
   scripts/ci_base_image.py \
   scripts/dispatch-ci-attestation.mjs \
+  scripts/brio-operation-lease.py \
+  scripts/brio-operation-lease-coordinator.py \
+  scripts/brio-operation-lease-dispatch.py \
+  scripts/brio-operation-lease-remote.sh \
+  scripts/derive-brio-operation-owner.py \
+  scripts/install-brio-operation-lease.sh \
   scripts/github_environment_policy.py \
   scripts/migrate-openpanel-secret-scope.sh \
   scripts/nginx-ci-queue-controller.mjs \
@@ -102,5 +108,9 @@ NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_credential_sync.py"
 NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_brio_nginx_control_receipt.py"
+NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
+  "${policy_root}/tests/test_brio_operation_lease.py"
+NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
+  "${policy_root}/tests/test_brio_operation_lease_wiring.py"
 
 printf 'Protected Nginx candidate policy passed for %s.\n' "$(git -C "${candidate_root}" rev-parse HEAD)"

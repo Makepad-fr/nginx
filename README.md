@@ -62,9 +62,117 @@ docker node update --label-add infra.makepad.proxy=true <proxy-node>
 
 The deploy workflow is manual and accepts only the exact commit selected from
 protected `main`. It runs in the repository-restricted `Nginx Deploy`
-organization runner group on a dedicated self-hosted runner; ordinary CI uses
-the separate `Nginx CI` group and never receives deployment credentials. Keep
-both groups restricted to this repository and their protected workflow paths.
+organization runner group on a dedicated self-hosted runner. CI uses a separate
+`Nginx CI` selected-workflow group. There is no persistent runner registered
+with the `makepad-nginx-ci-ephemeral` label: a trusted root-only controller
+creates one GitHub JIT configuration, boots one self-contained KVM guest, and
+destroys the guest after exactly one job. The persistent
+`makepad-nginx-ci-attestor` host, JIT hypervisor, and deployment host are three
+separate machines and accounts. Both groups allow this public repository but
+are restricted to this repository and exact workflow files from
+`refs/heads/main`; labels alone are not an authorization boundary.
+
+The `pull_request_target` workflow loads its commands from protected `main`,
+checks out the exact same-repository PR head only as candidate data, and runs a
+protected-base harness inside the disposable VM. Fork PRs and draft PRs are
+rejected. The controller independently authorizes the exact queued workflow,
+run attempt, job, base SHA, current PR head, runner group, and exclusive label
+set. The protected workflow and JIT runner share a unique
+`makepad-nginx-job-<run>-<attempt>` label so a different queued run cannot claim
+that VM. Before spawning the launcher, the controller durably records the job
+ID plus a 128-bit resource identity that deterministically names its VM,
+libvirt network, bridge, nftables table, job directory, qcow2, cloud-init seed,
+and GitHub runner. A crash can therefore never turn those objects into
+unidentifiable orphans.
+
+The hypervisor uses an immutable root-owned qcow2 approved by SHA-256, copies it
+without a backing or data chain, and checks the digest both before and after the
+copy. A per-job libvirt network and hypervisor nftables deny private,
+WireGuard, link-local, metadata, multicast, IPv6, and hypervisor destinations;
+only public DNS and TCP 443 egress remain. The guest contains no repository,
+environment, deployment, GitHub App, or Proton Pass credential.
+
+After the Actions job stops, the hypervisor proves the VM, disk, cloud-init
+seed, libvirt network, nftables table, and GitHub runner registration absent.
+Only then does it bind the authoritative run and attempt result into canonical
+JSON, sign it with its Ed25519 key, and dispatch it using the repository-scoped
+Launcher App. Cleanup uncertainty emits no result and triggers the independent
+host failure alert. The physically separate attestor verifies the immutable
+numeric Launcher-App sender ID, signature, freshness, approved image digest,
+nonce replay, current PR or protected-main identity, exact runner identity, and
+registration absence. A Checks-only App then publishes `policy-and-render`.
+Branch protection binds that context to the App ID, so a same-named Actions
+check cannot satisfy it.
+
+At controller startup, every durable `launching` entry is reconciled before a
+new job is queried or launched. `scripts/reconcile-nginx-ci-jit.sh` first stops
+and removes the exact local domain, network, and bridge, preserves the firewall
+and disk whenever containment is uncertain, and proves the local objects absent without
+depending on DNS or GitHub. A second phase obtains a fresh Launcher App token,
+deletes the exact runner registration, and proves it absent. The ledger remains
+`launching` across any cleanup failure or another SIGKILL, so systemd retries
+the idempotent reconciliation after a full hypervisor reboot. Only complete
+proof changes the entry to permanent `failed`; the original job is never
+retried, and the controller fails once to activate its independent host alert.
+
+`NGINX_PR_CHECK_APP_PRIVATE_KEY` exists only in the main-restricted
+`release-nginx` environment. Repository variables hold the non-secret
+`NGINX_PR_CHECK_APP_ID`, `NGINX_CI_LAUNCHER_APP_SENDER_ID`,
+`NGINX_CI_APPROVED_BASE_IMAGE_SHA256`, and
+`NGINX_CI_ATTESTATION_PUBLIC_KEY`. Manual deployment requires both the exact
+successful protected-main `CI` run and its matching App-bound signed-teardown
+check before the credentialed job can start.
+
+Bootstrap these controls only from a trusted administrator workstation after
+the reviewed files are on `main`:
+
+```sh
+./scripts/configure-runner-groups.sh < /secure/path/org-runner-controller-token
+./scripts/configure-github-ci-policy.sh \
+  NGINX_CHECKS_APP_ID NGINX_LAUNCHER_BOT_ID REVIEWED_BASE_IMAGE_SHA256 \
+  /secure/path/hypervisor-attestation-public.pem \
+  < /secure/path/repository-admin-token
+```
+
+The paths are illustrative. In normal operation stream token and key fields
+directly from their canonical Proton Pass items with `pass-cli`; do not print
+or leave them in a workspace. The runner reconciler fails closed if the
+attestor or deploy host is absent, a persistent runner has the JIT-only label,
+any runner exposes unexpected custom labels, or Nginx can reach a repository or
+organization runner outside the two selected-workflow groups.
+
+Enable `host/systemd/nginx-ci-queue-controller.service` on the dedicated KVM
+hypervisor and install `host/systemd/nginx-ci-queue-alert.service` plus
+`host/libexec/send-nginx-host-alert`. Install the launcher, controller, and
+`scripts/reconcile-nginx-ci-jit.sh` as immutable root-owned executables. The controller ledger under
+`/var/lib/makepad/nginx-ci` is root-owned durable local storage. Its root-only
+`/etc/makepad/nginx-ci/controller.env` contains only identifiers, reviewed
+digests, intervals, and absolute file paths:
+
+- `NGINX_CI_REPOSITORY_ID`
+- `NGINX_CI_LAUNCHER_APP_ID`
+- `NGINX_CI_LAUNCHER_APP_INSTALLATION_ID`
+- `NGINX_CI_LAUNCHER_APP_PRIVATE_KEY_FILE`
+- `NGINX_CI_ATTESTATION_PRIVATE_KEY_FILE`
+- `NGINX_CI_CONTROLLER_STATE_DIRECTORY`
+- `NGINX_CI_LAUNCHER`
+- `NGINX_CI_RECONCILER`
+- `NGINX_CI_BASE_IMAGE`
+- `NGINX_CI_BASE_IMAGE_SHA256`
+- `NGINX_CI_JOB_ROOT`
+- `NGINX_CI_LIBVIRT_GROUP`
+- `NGINX_CI_PUBLIC_DNS_IPV4`
+- `NGINX_CI_POLL_SECONDS`
+
+The App and Ed25519 key files are root-owned mode `0400`. The launcher is a
+root-owned mode `0755` regular file reached without a mutable symlink. The base
+image and every path component are root-owned and non-writable, and the image
+has the filesystem immutable attribute. Treat Docker access inside the guest as
+guest root access. The credential-free guest image contains cloud-init, the
+GitHub Actions runner under `/opt/actions-runner`, an unprivileged
+`actions-runner` account, Docker, Python 3.11+, Node 18+, `actionlint`,
+ShellCheck, OpenSSL, curl, and `envsubst`; it is never joined to WireGuard or an
+internal application network.
 
 Required environment secrets:
 
@@ -81,6 +189,11 @@ Required environment secrets:
 - `MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK`
 - `MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK`
 
+Every deployment secret in that inventory is scoped only to the protected
+`production` environment. Repository- and organization-level copies are
+forbidden: an environment-scoped reference can otherwise silently fall back to
+a broader repository secret when an environment field is absent.
+
 Required protected `production` environment variables are pinned by both the
 workflow and the environment configuration:
 
@@ -94,6 +207,65 @@ Keep the SSH key and host-key record in Proton Pass and mirror them only to the
 protected GitHub environment. Keep the non-secret target coordinates in the
 same Proton Pass server item and GitHub environment variables. The workflow
 rejects any target drift before opening an SSH connection.
+
+### Credential and variable inventory
+
+Canonical long-lived values are created or rotated in Proton Pass first. Mirror
+only the exact field to its documented GitHub environment or root-only host
+boundary; compare stored fingerprints and IDs without printing secret values.
+
+| Proton Pass item | Exact fields | GitHub or host mirror | Authority boundary |
+| --- | --- | --- | --- |
+| `Nginx · CI Checks App` | `app_id`, `private_key`, `private_key_fingerprint` | Repository variable `NGINX_PR_CHECK_APP_ID`; `release-nginx` secret `NGINX_PR_CHECK_APP_PRIVATE_KEY` | Installed only on `Makepad-fr/nginx`: Metadata read, Checks write, and organization self-hosted-runners read. No Actions, Contents, administration, deployment, environment, or secret access. |
+| `Nginx · CI Launcher App` | `app_id`, `installation_id`, `private_key`, `bot_user_id`, `private_key_fingerprint` | Root-only hypervisor private-key file and IDs in `controller.env`; repository variable `NGINX_CI_LAUNCHER_APP_SENDER_ID` receives `bot_user_id` | Installed only on `Makepad-fr/nginx`: Metadata read, Actions read, Pull requests read, Issues write, organization self-hosted-runners write, and Contents write solely for repository dispatch. It is not a branch-protection bypass actor. |
+| `Nginx · CI hypervisor attestation` | `ed25519_private_key`, `ed25519_public_key`, `public_key_fingerprint` | Root-owned mode-`0400` hypervisor file; repository variable `NGINX_CI_ATTESTATION_PUBLIC_KEY` | Generate on the dedicated hypervisor. The private key never enters GitHub, a runner guest, or the attestor. |
+| `Nginx · CI base image approval` | `qcow2_sha256`, `repository_id` | Repository variable `NGINX_CI_APPROVED_BASE_IMAGE_SHA256`; matching `controller.env` values | Review and hash the self-contained credential-free image before applying its immutable attribute. |
+| `Nginx · host control alert webhook` | `url` | Root-owned mode-`0400` file named by `NGINX_HOST_ALERT_URL_FILE` | HTTPS operations channel independent of GitHub; never expose it to a workflow or guest. |
+| `Nginx · production deployment` | `private_key`, `known_hosts`, `host`, `port`, `user`, `remote_dir`, `stack_name` | `production` secrets `DEPLOY_SSH_PRIVATE_KEY`, `DEPLOY_SSH_KNOWN_HOSTS`; `NGINX_DEPLOY_*` environment variables | Dedicated non-root deploy account and exact pinned proxy host. |
+| `Nginx · production overlay names` | `prod`, `canary`, `alerteconso`, `le_petit_coin`, `vif`, `makepad_landing`, `evidella`, `openpanel`, `runtrace`, `brio_staging`, `maildev_brio_staging_web` | Matching `production` `MAKEPAD_PROXY_*_APP_NETWORK` secrets | Network identifiers only; retain their current secret aliases for workflow compatibility. |
+| `Nginx · GitHub repository policy bootstrap` | `repository_admin_token` | Stream once to `configure-github-ci-policy.sh`; never store in Actions | Short-lived repository Administration, Actions, Environments, Variables, and Metadata authority; revoke after read-back. |
+| `Nginx · GitHub runner policy bootstrap` | `organization_runner_admin_token` | Stream once to `configure-runner-groups.sh`; never store in Actions | Short-lived organization runner-group authority plus repository Metadata read; revoke after read-back. |
+
+GitHub requires repository `Contents: write` for
+`POST /repos/Makepad-fr/nginx/dispatches`; that is the sole reason the Launcher
+App holds that permission. All ambient workflow tokens remain explicitly
+read-only except the deploy gate's read-only Actions and Checks access.
+
+### Remove the legacy OpenPanel repository secret
+
+The legacy repository-level `MAKEPAD_PROXY_OPENPANEL_APP_NETWORK` must be
+removed after, and only after, the canonical Proton value has been explicitly
+written to the protected `production` environment. GitHub's API never returns a
+secret value, so it cannot compare the two copies. Use this exact sequence from
+an approved administrator workstation; neither command prints the value:
+
+```sh
+pass-cli item view --vault-name '<operators-vault>' \
+  --item-title 'Nginx · production overlay names' --field openpanel | \
+  gh secret set MAKEPAD_PROXY_OPENPANEL_APP_NETWORK \
+    --repo Makepad-fr/nginx --env production
+
+pass-cli item view --vault-name '<operators-vault>' \
+  --item-title 'Nginx · GitHub repository policy bootstrap' \
+  --field repository_admin_token | \
+  ./scripts/migrate-openpanel-secret-scope.sh \
+    --delete-repository-duplicate \
+    'Nginx · production overlay names/openpanel'
+
+pass-cli item view --vault-name '<operators-vault>' \
+  --item-title 'Nginx · GitHub repository policy bootstrap' \
+  --field repository_admin_token | \
+  ./scripts/migrate-openpanel-secret-scope.sh --check
+```
+
+The migration helper first proves that `production` is restricted to exact
+`main`, that the environment copy exists, and that its `updated_at` is later
+than the legacy copy. It deletes only the exact repository-level name, then
+re-reads both inventories and proves the environment copy remains. Revoke the
+short-lived repository administrator token and record only the Proton item ID,
+field name, timestamps, and successful non-secret audit result. Never reverse
+the order: deleting the broad copy before re-mirroring from Proton can break
+OpenPanel routing on the next deployment.
 
 The workflow deploys only the proxy stack. If the shared application network does not exist yet, it is created on the manager before deployment.
 `MAKEPAD_PROXY_RUNTRACE_APP_NETWORK` is optional and defaults to `makepad_runtrace_prod_app`, matching the Runtrace app deployment template; set it only if the Runtrace app stack uses a different overlay network name.

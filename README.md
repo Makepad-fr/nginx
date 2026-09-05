@@ -17,10 +17,12 @@ they do not deploy a second proxy.
 
 ## Brio staging ingress
 
-The shared proxy joins two encrypted overlays for Brio:
+The shared proxy joins two encrypted overlays for Brio. It validates them but
+does not create or relabel them:
 
-- `makepad_brio_staging_app` for the Brio web service.
-- `makepad_brio_staging_maildev_web` for MailDev and its GitHub OAuth gate.
+- `makepad_brio_staging_app`, owned by the Brio deployment, for the web service.
+- `makepad_brio_staging_maildev_web`, owned by the MailDev deployment, for
+  MailDev and its GitHub OAuth gate.
 
 The Brio application route forwards to `http://brio-staging-app:8080`. The
 MailDev route forwards to `http://maildev-brio-staging:1080` only after an

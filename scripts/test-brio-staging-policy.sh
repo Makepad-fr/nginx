@@ -34,7 +34,9 @@ for expected in \
   'STACK_NAME: ${{ vars.NGINX_DEPLOY_STACK_NAME }}' \
   'MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK must be makepad_brio_staging_app' \
   'MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK must be makepad_brio_staging_maildev_web' \
-  'create_args=(--driver overlay --attachable --opt encrypted=true)' \
+  'require_brio_network "${brio_app_network}" false Makepad-fr/brio app-edge' \
+  'require_brio_network "${brio_maildev_network}" true Makepad-fr/maildev maildev-web' \
+  'deploy its owning service first' \
   'openssl x509 -in "${certificate}" -noout -checkhost "${host}"' \
   'openssl x509 -in "${certificate}" -noout -checkend 604800' \
   'openssl verify -purpose sslserver -verify_hostname "${host}"' \
@@ -97,6 +99,11 @@ grep -Fq -- 'test: ["CMD", "nginx", "-t"]' "${repo_root}/compose.yml" || {
   echo "Nginx service is missing its configuration healthcheck." >&2
   exit 1
 }
+
+if sed -n '/require_brio_network()/,/^          }/p' "${workflow}" | grep -Fq -- 'docker network create'; then
+  echo "Nginx must not create application-owned Brio networks." >&2
+  exit 1
+fi
 
 python3 - "${repo_root}/sites/brio-staging.conf.template" "${repo_root}/sites/maildev-brio-staging.conf.template" <<'PY'
 import pathlib

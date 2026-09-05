@@ -294,20 +294,19 @@ jobs:
               || docker network create --driver overlay --attachable "${app_network}"
           done
 
-          ensure_brio_network() {
+          require_brio_network() {
             local network_name=$1
             local internal=$2
-            if ! docker network inspect "${network_name}" >/dev/null 2>&1; then
-              create_args=(--driver overlay --attachable --opt encrypted=true)
-              if [[ "${internal}" == "true" ]]; then
-                create_args+=(--internal)
-              fi
-              docker network create "${create_args[@]}" "${network_name}" >/dev/null
+            local expected_owner=$3
+            local expected_purpose=$4
+            local details expected
+            if ! details=$(docker network inspect "${network_name}" --format '{{.Driver}}|{{.Scope}}|{{.Internal}}|{{.Attachable}}|{{index .Options "encrypted"}}|{{index .Labels "com.makepad.owner"}}|{{index .Labels "com.makepad.environment"}}|{{index .Labels "com.makepad.instance"}}|{{index .Labels "com.makepad.purpose"}}'); then
+              echo "Required Brio network ${network_name} does not exist; deploy its owning service first." >&2
+              exit 1
             fi
-            local details
-            details=$(docker network inspect "${network_name}" --format '{{.Driver}} {{.Scope}} {{.Internal}} {{.Attachable}} {{index .Options "encrypted"}}')
-            if [[ "${details}" != "overlay swarm ${internal} true true" ]]; then
-              echo "Brio network ${network_name} has unexpected isolation/encryption settings: ${details}" >&2
+            expected="overlay|swarm|${internal}|true|true|${expected_owner}|staging|brio|${expected_purpose}"
+            if [[ "${details}" != "${expected}" ]]; then
+              echo "Brio network ${network_name} has unexpected isolation or ownership metadata." >&2
               exit 1
             fi
           }
@@ -317,8 +316,8 @@ jobs:
             echo "Brio deployment bundle contains non-canonical network names." >&2
             exit 1
           fi
-          ensure_brio_network "${brio_app_network}" false
-          ensure_brio_network "${brio_maildev_network}" true
+          require_brio_network "${brio_app_network}" false Makepad-fr/brio app-edge
+          require_brio_network "${brio_maildev_network}" true Makepad-fr/maildev maildev-web
 
           docker compose \
             --env-file "${remote_dir}/envs/${deploy_env}/.env.proxy" \

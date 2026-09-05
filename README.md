@@ -218,6 +218,27 @@ protected GitHub environment. Keep the non-secret target coordinates in the
 same Proton Pass server item and GitHub environment variables. The workflow
 rejects any target drift before opening an SSH connection.
 
+Install the Brio release-evidence observer on the proxy host from a protected
+`main` checkout before collecting a release package:
+
+```sh
+sudo scripts/install-brio-control-receipt.sh
+```
+
+The installer atomically publishes the fixed helper at
+`/usr/local/libexec/makepad/brio-nginx-control-receipt` as root-owned mode
+`0755`. The helper emits canonical `makepad.brio.runtime-controls.v1` JSON. It
+reads only the active Swarm service/task, Brio network metadata, and rendered
+Nginx configuration; it runs `nginx -t`, makes body-free HTTPS header requests,
+and performs verified loopback TLS handshakes with each production SNI name.
+It fails closed unless the only public service ports are TCP 80/443, the exact
+Brio and MailDev route-policy digests/upstreams are active, both certificate
+chains and exact SAN sets are valid with at least seven days remaining, and
+the live responses carry the reviewed security and private/no-store headers.
+The receipt contains public certificate digests/expiry only; it never reads or
+emits a private key, response body, cookie, query string, client address, or
+upstream payload, and it performs no reload, rollout, or provider mutation.
+
 ### Credential and variable inventory
 
 Canonical long-lived values are created or rotated in Proton Pass first. Mirror

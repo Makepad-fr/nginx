@@ -100,5 +100,7 @@ NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_secret_scope_policy.py"
 NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_credential_sync.py"
+NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
+  "${policy_root}/tests/test_brio_nginx_control_receipt.py"
 
 printf 'Protected Nginx candidate policy passed for %s.\n' "$(git -C "${candidate_root}" rev-parse HEAD)"

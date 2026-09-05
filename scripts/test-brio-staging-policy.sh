@@ -143,6 +143,8 @@ PY
 ci_workflow="${repo_root}/.github/workflows/ci.yml"
 finalizer_workflow="${repo_root}/.github/workflows/pr-ci-result.yml"
 candidate_harness="${repo_root}/scripts/run-protected-candidate-harness.sh"
+credential_inventory="${repo_root}/deploy/credential-inventory.json"
+credential_sync="${repo_root}/scripts/sync-github-credentials.sh"
 check_publisher="${repo_root}/scripts/publish-pr-ci-check.mjs"
 queue_controller="${repo_root}/scripts/nginx-ci-queue-controller.mjs"
 jit_launcher="${repo_root}/scripts/run-nginx-ci-jit-vm.sh"
@@ -207,6 +209,8 @@ for forbidden in '_source' 'download-artifact' 'workflow_run.head_repository'; d
 done
 for required_file in \
   "${candidate_harness}" \
+  "${credential_inventory}" \
+  "${credential_sync}" \
   "${check_publisher}" \
   "${queue_controller}" \
   "${jit_launcher}" \
@@ -287,12 +291,28 @@ for expected in \
   'tests/test_base_image_integrity.py' \
   'tests/test_ci_release_gate.py' \
   'tests/test_environment_policy.py' \
-  'tests/test_secret_scope_policy.py'; do
+  'tests/test_secret_scope_policy.py' \
+  'tests/test_credential_sync.py'; do
   grep -Fq -- "${expected}" "${candidate_harness}" || {
     echo "Nginx protected candidate harness is missing: ${expected}" >&2
     exit 1
   }
 done
+
+for expected in \
+  'deploy/credential-inventory.json' \
+  'scripts/sync-github-credentials.sh'; do
+  grep -Fq -- "${expected}" "${candidate_harness}" || {
+    echo "Nginx protected harness does not require credential policy: ${expected}" >&2
+    exit 1
+  }
+done
+
+if grep -Fq -- "secrets.MAKEPAD_PROXY_RUNTRACE_APP_NETWORK ||" \
+  "${repo_root}/.github/workflows/manual-deploy.yml"; then
+  echo "Runtrace overlay must not fall back around the protected production inventory." >&2
+  exit 1
+fi
 for expected in \
   'const EXPECTED_REPOSITORY = "Makepad-fr/nginx"' \
   'const EXPECTED_WORKFLOW_PATH = ".github/workflows/ci.yml"' \

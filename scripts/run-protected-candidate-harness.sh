@@ -28,6 +28,7 @@ for required in \
   .github/workflows/manual-deploy.yml \
   .github/workflows/pr-ci-result.yml \
   compose.yml \
+  deploy/credential-inventory.json \
   scripts/ci_base_image.py \
   scripts/dispatch-ci-attestation.mjs \
   scripts/github_environment_policy.py \
@@ -38,6 +39,7 @@ for required in \
   scripts/require-successful-ci.sh \
   scripts/run-nginx-ci-jit-vm.sh \
   scripts/run-nginx-ci-queue-controller.sh \
+  scripts/sync-github-credentials.sh \
   scripts/test-brio-staging-policy.sh \
   scripts/test-runtrace-upload-policy.sh \
   sites/00-common.conf.template \
@@ -90,5 +92,7 @@ NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_environment_policy.py"
 NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
   "${policy_root}/tests/test_secret_scope_policy.py"
+NGINX_CANDIDATE_ROOT="${candidate_root}" python3 \
+  "${policy_root}/tests/test_credential_sync.py"
 
 printf 'Protected Nginx candidate policy passed for %s.\n' "$(git -C "${candidate_root}" rev-parse HEAD)"

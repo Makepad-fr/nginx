@@ -88,7 +88,13 @@ def main():
                 actual = {c['ConfigID'] for c in after['Spec']['TaskTemplate']['ContainerSpec']['Configs']}
                 if not preserved <= actual or not previous_networks <= {n['Target'] for n in after['Spec']['TaskTemplate']['Networks']}:
                     raise RuntimeError('Shared ingress resources were not preserved')
-                for key in ('Image', 'Mounts', 'Env', 'Command', 'Args'):
+                after_container = after['Spec']['TaskTemplate']['ContainerSpec']
+                normalize_mounts = lambda values: sorted(values, key=lambda mount: mount['Target'])
+                if normalize_mounts(after_container.get('Mounts', [])) != normalize_mounts(spec.get('Mounts', [])):
+                    raise RuntimeError('Unexpected change to shared mounts')
+                if sorted(after_container.get('Env', [])) != sorted(spec.get('Env', [])):
+                    raise RuntimeError('Unexpected change to shared environment')
+                for key in ('Image', 'Command', 'Args'):
                     if after['Spec']['TaskTemplate']['ContainerSpec'].get(key) != spec.get(key):
                         raise RuntimeError('Unexpected change to '+key)
                 active = run('docker', 'ps', '-q', '--filter', 'label=com.docker.swarm.service.name='+SERVICE).split()

@@ -25,7 +25,7 @@ MAILDEV_AUTH_UPSTREAM = "http://maildev-brio-staging-auth:4180"
 BRIO_CONFIG_SHA256 = "b03afcc8fd4fcccbe4c07c9c9712124f6ce8c0c03d52c66c55f68cdf8e5eecac"
 MAILDEV_CONFIG_SHA256 = "f6ba6c58b75f836dca38a12430b1b15adec574709c2ff12c524bf7b31edd6a1a"
 MAX_OUTPUT_BYTES = 512 * 1024
-APPLICATION_CSP = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
+APPLICATION_CSP = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://auth-brio-staging.makepad.fr https://checkout.stripe.com https://billing.stripe.com; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
 PROXY_PERMISSIONS = "camera=(), geolocation=(), microphone=(), payment=(self), usb=()"
 NETWORKS: dict[str, dict[str, str | bool]] = {
     "makepad_brio_staging_app": {

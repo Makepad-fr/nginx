@@ -78,7 +78,7 @@ def main():
                             '--health-start-period', '10s'])
             for config in previous_configs:
                 if Path(config['File']['Name']).name in TARGETS:
-                    changes.extend(['--config-rm', config['ConfigID']])
+                    changes.extend(['--config-rm', config['ConfigName']])
             for name, content in rendered.items():
                 digest = hashlib.sha256(content.encode()).hexdigest()[:16]
                 config_name = 'brio_'+name.replace('.', '_')+'_'+digest
@@ -87,7 +87,11 @@ def main():
                     run('docker', 'config', 'create', '--label', 'com.makepad.owner=Makepad-fr/nginx', config_name, '-', input=content.encode())
                 changes.extend(['--config-add', 'source='+config_name+',target=/etc/nginx/templates/'+name+',mode=0444'])
             try:
-                run('docker', 'service', 'update', '--detach=false', *changes, SERVICE, stderr=subprocess.STDOUT)
+                try:
+                    run('docker', 'service', 'update', '--detach=false', *changes, SERVICE, stderr=subprocess.STDOUT)
+                except subprocess.CalledProcessError as error:
+                    output = (error.output or b'').decode(errors='replace')
+                    raise RuntimeError('Shared ingress update failed: '+output[-4000:]) from error
                 after = inspect()
                 preserved = {c['ConfigID'] for c in previous_configs if Path(c['File']['Name']).name not in TARGETS}
                 actual = {c['ConfigID'] for c in after['Spec']['TaskTemplate']['ContainerSpec']['Configs']}
@@ -111,7 +115,10 @@ def main():
                 run('docker', 'exec', active[0], 'nginx', '-t', stderr=subprocess.STDOUT)
                 print('Brio ingress deployed; existing routes, image, mounts, environment and networks preserved.')
             except BaseException:
-                run('docker', 'service', 'rollback', '--detach=false', SERVICE, stderr=subprocess.STDOUT)
+                # CLI validation can fail before changing the service. Rolling
+                # back in that case would revert an unrelated prior deployment.
+                if inspect()['Version']['Index'] != before['Version']['Index']:
+                    run('docker', 'service', 'rollback', '--detach=false', SERVICE, stderr=subprocess.STDOUT)
                 raise
 
 if __name__ == '__main__':

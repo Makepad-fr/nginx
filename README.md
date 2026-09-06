@@ -173,3 +173,13 @@ docker run --rm --network none \
 python3 -m unittest ./tests/test_credential_sync.py
 python3 -m unittest ./tests/test_brio_nginx_control_receipt.py
 ```
+
+## Add Brio staging to the existing ingress
+
+Run `Deploy Brio staging ingress` from main to add Brio and its MailDev OAuth
+routes without replacing other projects. This workflow preserves the running
+image, environment, mounts, existing configuration objects and network bindings.
+It validates the complete candidate configuration beside the current service,
+then updates only Brio configuration objects and its two network attachments.
+A failed update restores the previous service specification. The same helper
+supports `--check` for host-side syntax validation without deployment.

@@ -1,0 +1,56 @@
+name: Deploy Brio staging ingress
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nginx-production-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'Makepad-fr/nginx' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64, makepad]
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Deploy only Brio routes while preserving existing ingress
+        shell: bash
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          REMOTE_HOST: ${{ vars.NGINX_DEPLOY_HOST }}
+          REMOTE_USER: ${{ vars.NGINX_DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "${GITHUB_SHA}" ]]
+          [[ "${REMOTE_HOST}" == 135.181.141.31 && "${REMOTE_USER}" == makepad ]]
+          : "${SSH_KEY:?}" "${SSH_HOSTS:?}"
+          job_dir=$(mktemp -d "${RUNNER_TEMP}/nginx-brio-XXXXXXXX")
+          remote_dir="/tmp/nginx-brio-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          umask 077
+          printf '%s\n' "${SSH_KEY}" >"${job_dir}/key"
+          printf '%s\n' "${SSH_HOSTS}" >"${job_dir}/known_hosts"
+          unset SSH_KEY SSH_HOSTS
+          ssh_opts=(-F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=${job_dir}/known_hosts" -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i "${job_dir}/key")
+          remote="${REMOTE_USER}@${REMOTE_HOST}"
+          cleanup() {
+            status=$?
+            trap - EXIT
+            # The remote path contains only a fixed prefix and numeric run IDs.
+            # shellcheck disable=SC2029
+            ssh "${ssh_opts[@]}" "${remote}" "rm -rf -- '${remote_dir}'" || status=1
+            rm -rf -- "${job_dir}"
+            exit "${status}"
+          }
+          trap cleanup EXIT
+          # shellcheck disable=SC2029
+          ssh "${ssh_opts[@]}" "${remote}" "test ! -e '${remote_dir}' && install -d -m 0700 '${remote_dir}'"
+          # shellcheck disable=SC2029
+          tar -cf - scripts/deploy-brio-ingress.py sites/00-common.conf.template sites/brio-staging.conf.template sites/maildev-brio-staging.conf.template envs/production/.env.proxy | \
+            ssh "${ssh_opts[@]}" "${remote}" "tar -xf - -C '${remote_dir}'"
+          # shellcheck disable=SC2029
+          ssh "${ssh_opts[@]}" "${remote}" "python3 '${remote_dir}/scripts/deploy-brio-ingress.py'"

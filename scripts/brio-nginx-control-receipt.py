@@ -24,6 +24,7 @@ MAILDEV_UPSTREAM = "http://maildev-brio-staging:1080"
 MAILDEV_AUTH_UPSTREAM = "http://maildev-brio-staging-auth:4180"
 BRIO_CONFIG_SHA256 = "b03afcc8fd4fcccbe4c07c9c9712124f6ce8c0c03d52c66c55f68cdf8e5eecac"
 MAILDEV_CONFIG_SHA256 = "f6ba6c58b75f836dca38a12430b1b15adec574709c2ff12c524bf7b31edd6a1a"
+COMMON_CONFIG_SHA256 = "308fe0d9f6424f51e386626ace48e49c1b47c88c60fee38dd60265d2a3e00e55"
 MAX_OUTPUT_BYTES = 512 * 1024
 APPLICATION_CSP = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://auth-brio-staging.makepad.fr https://checkout.stripe.com https://billing.stripe.com; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
 PROXY_PERMISSIONS = "camera=(), geolocation=(), microphone=(), payment=(self), usb=()"
@@ -254,9 +255,12 @@ def normalize_control_receipt(
     maildev_config: str,
     certificates: dict[str, dict[str, Any]],
     responses: dict[str, tuple[int, dict[str, list[str]]]],
+    common_config: str,
 ) -> dict[str, Any]:
     validate_service(service, container)
     route_digests = validate_rendered_configs(brio_config, maildev_config)
+    require(hashlib.sha256(common_config.encode("utf-8")).hexdigest() == COMMON_CONFIG_SHA256,
+            "Rendered Brio admission-zone policy drifted")
     require(set(certificates) == {"application", "mailCapture"}, "Nginx certificate receipt set was incomplete")
     for name, hostname in (("application", BRIO_HOST), ("mailCapture", MAILDEV_HOST)):
         certificate = certificates[name]
@@ -298,6 +302,13 @@ def normalize_control_receipt(
             "MailDev OAuth redirect target drifted")
     return {
         "controls": {
+            "clientAdmission": {
+                "applicationSubmit": {"rate": "5r/m", "burst": 2, "noDelay": True},
+                "clientKey": "$binary_remote_addr",
+                "concurrentConnections": 30,
+                "forwardedClientHeaders": "stripped",
+                "general": {"rate": "15r/s", "burst": 40, "noDelay": True},
+            },
             "exposure": {"publicTCPPorts": [80, 443]},
             "headers": {
                 "application": {
@@ -366,6 +377,7 @@ def collect_control_receipt(runner: Runner) -> dict[str, Any]:
     maildev_config = runner.run(
         "docker", "exec", container_id, "cat", "/etc/nginx/conf.d/maildev-brio-staging.conf"
     )
+    common_config = runner.run("docker", "exec", container_id, "cat", "/etc/nginx/conf.d/02-brio-common.conf")
     certificates = {
         "application": observe_certificate(BRIO_HOST),
         "mailCapture": observe_certificate(MAILDEV_HOST),
@@ -375,7 +387,7 @@ def collect_control_receipt(runner: Runner) -> dict[str, Any]:
         "mailCapture": live_headers(runner, MAILDEV_HOST, "/"),
     }
     return normalize_control_receipt(
-        services[0], container, brio_config, maildev_config, certificates, responses
+        services[0], container, brio_config, maildev_config, certificates, responses, common_config
     )
 
 

@@ -145,13 +145,19 @@ class BrioNginxControlReceiptTests(unittest.TestCase):
         self.container = container()
         self.brio = rendered("brio-staging.conf.template")
         self.maildev = rendered("maildev-brio-staging.conf.template")
+        self.common = "# Brio logs" + (ROOT / "sites/00-common.conf.template").read_text().split("# Brio logs", 1)[1]
         self.certificates = certificates()
         self.responses = responses()
 
     def receipt(self):
         return MODULE.normalize_control_receipt(
-            self.service, self.container, self.brio, self.maildev, self.certificates, self.responses
+            self.service, self.container, self.brio, self.maildev, self.certificates, self.responses, self.common
         )
+
+    def test_changed_admission_zone_is_rejected(self):
+        self.common = self.common.replace("15r/s", "150r/s")
+        with self.assertRaisesRegex(MODULE.ReceiptError, "admission-zone"):
+            self.receipt()
 
     def test_canonical_secret_free_receipt(self) -> None:
         receipt = self.receipt()

@@ -99,7 +99,7 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 actual = sorted(path.name for path in root.iterdir() if path.suffix in {".yml", ".yaml"})
-if actual != ["ci.yml", "manual-deploy.yml"]:
+if actual != ["ci.yml", "deploy-brio-staging.yml", "manual-deploy.yml"]:
     raise SystemExit(f"unexpected Nginx workflow inventory: {actual!r}")
 PY
 

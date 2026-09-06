@@ -71,6 +71,11 @@ def main():
                 print('Candidate Nginx configuration passed syntax validation with all existing routes.')
                 return
             changes = list(additions)
+            # Apply the health check already declared in compose.yml even when
+            # the existing shared service predates that declaration.
+            changes.extend(['--health-cmd', 'nginx -t', '--health-interval', '15s',
+                            '--health-timeout', '5s', '--health-retries', '3',
+                            '--health-start-period', '10s'])
             for config in previous_configs:
                 if Path(config['File']['Name']).name in TARGETS:
                     changes.extend(['--config-rm', config['ConfigID']])
@@ -100,6 +105,9 @@ def main():
                 active = run('docker', 'ps', '-q', '--filter', 'label=com.docker.swarm.service.name='+SERVICE).split()
                 if len(active) != 1:
                     raise RuntimeError('Shared ingress did not converge to one container')
+                health = json.loads(run('docker', 'inspect', active[0]))[0].get('State', {}).get('Health', {}).get('Status')
+                if health != 'healthy':
+                    raise RuntimeError('Shared ingress health check did not converge')
                 run('docker', 'exec', active[0], 'nginx', '-t', stderr=subprocess.STDOUT)
                 print('Brio ingress deployed; existing routes, image, mounts, environment and networks preserved.')
             except BaseException:

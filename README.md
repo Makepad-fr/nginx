@@ -183,3 +183,5 @@ It validates the complete candidate configuration beside the current service,
 then updates only Brio configuration objects and its two network attachments.
 A failed update restores the previous service specification. The same helper
 supports `--check` for host-side syntax validation without deployment.
+
+The additive Brio ingress deployment also applies the `nginx -t` health check declared in `compose.yml` to older shared services. It verifies healthy convergence and retains the existing rollback behavior.

@@ -1,0 +1,27 @@
+server {
+    listen 80;
+    server_name sentry.makepad.fr;
+    location /.well-known/acme-challenge/ { root /var/lib/letsencrypt; }
+    location / { return 301 https://sentry.makepad.fr$request_uri; }
+}
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name sentry.makepad.fr;
+    ssl_certificate /etc/letsencrypt/live/sentry.makepad.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/sentry.makepad.fr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    client_max_body_size 20m;
+    location / {
+        set $sentry_upstream http://makepad-sentry-ingress:80;
+        proxy_pass $sentry_upstream;
+        proxy_http_version 1.1;
+        proxy_read_timeout 75s;
+        proxy_set_header Host sentry.makepad.fr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}

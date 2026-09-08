@@ -4,7 +4,25 @@ Shared Nginx reverse-proxy deployment for Makepad-fr applications. Application
 repositories attach their services to the shared external overlay networks;
 they do not deploy a second proxy.
 
-## Layout
+## Consent Lens deployment
+
+`consent.makepad.fr` uses `sites/consent-lens-prod.conf.template`, forwarding to `consent-lens-web:3000` on the encrypted, attachable overlay `makepad_consent_lens_prod_app` (`10.0.41.0/24`). `MAKEPAD_PROXY_CONSENT_LENS_APP_NETWORK` can override the shared network name in production Compose and must match the application deployment. The edge overwrites `X-Real-IP`; only this app-specific subnet is trusted by Consent Lens. Request limits, privacy-preserving logs, and unbuffered scan progress are configured in the route.
+
+On the existing VM, use the additive deployment script so unrelated manually installed routes remain intact:
+
+```bash
+python3 scripts/deploy-consent-ingress.py --bootstrap --check
+python3 scripts/deploy-consent-ingress.py --bootstrap
+# Issue TLS with the existing Certbot account and /var/lib/letsencrypt webroot.
+python3 scripts/deploy-consent-ingress.py --check
+python3 scripts/deploy-consent-ingress.py
+```
+
+The script validates a complete candidate copied from the live proxy and preserves all unrelated configs, networks, environment, image, and mounts. TLS files live under `/etc/letsencrypt/live/consent.makepad.fr/`. The existing system Certbot renewal timer reloads the shared proxy.
+
+`scripts/renew-betacrew-cert.sh` preserves the existing Betacrew Certbot directories and renewal schedule, but its deploy hook now validates and reloads the active proxy with `scripts/reload-shared-ingress.sh`. Certificate renewal must not redeploy a stale full proxy stack and remove newer application routes.
+
+## Repository layout
 
 - `compose.yml`: shared Nginx service and virtual-host configuration mounts.
 - `envs/production/compose.yml`: production Swarm overrides and external
@@ -185,3 +203,9 @@ A failed update restores the previous service specification. The same helper
 supports `--check` for host-side syntax validation without deployment.
 
 The additive Brio ingress deployment also applies the `nginx -t` health check declared in `compose.yml` to older shared services. It verifies healthy convergence and retains the existing rollback behavior.
+
+### Sentry error monitoring
+
+`sentry.makepad.fr` uses the encrypted attachable `makepad_sentry_prod_app` overlay (`10.0.42.0/24`), configurable through `MAKEPAD_PROXY_SENTRY_APP_NETWORK`. The upstream `makepad-sentry-ingress:80` is the upstream Sentry distribution's internal router on the app VM. Shared Nginx owns public TLS using `/etc/letsencrypt/live/sentry.makepad.fr/`; the existing Certbot renewal hook reloads this proxy. Sentry's own registration is disabled and its dashboard requires sign-in.
+
+Use `python3 scripts/deploy-sentry-ingress.py --check` followed by the same command without `--check` for an additive runtime update preserving all other routes, mounts, environment, image and networks. `--bootstrap` serves only HTTP ACME while provisioning the certificate. This requires the overlay to exist first. Do not deploy a stale full stack over runtime routes created by other projects.

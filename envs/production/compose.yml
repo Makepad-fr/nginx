@@ -43,6 +43,9 @@ services:
           memory: ${MAKEPAD_PROXY_MEMORY_RESERVATION:-64M}
 
 networks:
+  consent_lens_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_CONSENT_LENS_APP_NETWORK:-makepad_consent_lens_prod_app}
   prod_app:
     external: true
     name: ${MAKEPAD_PROXY_PROD_APP_NETWORK}

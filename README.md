@@ -203,3 +203,9 @@ A failed update restores the previous service specification. The same helper
 supports `--check` for host-side syntax validation without deployment.
 
 The additive Brio ingress deployment also applies the `nginx -t` health check declared in `compose.yml` to older shared services. It verifies healthy convergence and retains the existing rollback behavior.
+
+### Sentry error monitoring
+
+`sentry.makepad.fr` uses the encrypted attachable `makepad_sentry_prod_app` overlay (`10.0.42.0/24`), configurable through `MAKEPAD_PROXY_SENTRY_APP_NETWORK`. The upstream `makepad-sentry-ingress:80` is the upstream Sentry distribution's internal router on the app VM. Shared Nginx owns public TLS using `/etc/letsencrypt/live/sentry.makepad.fr/`; the existing Certbot renewal hook reloads this proxy. Sentry's own registration is disabled and its dashboard requires sign-in.
+
+Use `python3 scripts/deploy-sentry-ingress.py --check` followed by the same command without `--check` for an additive runtime update preserving all other routes, mounts, environment, image and networks. `--bootstrap` serves only HTTP ACME while provisioning the certificate. This requires the overlay to exist first. Do not deploy a stale full stack over runtime routes created by other projects.

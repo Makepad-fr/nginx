@@ -1,4 +1,6 @@
 configs:
+  sentry_prod_conf:
+    file: ./sites/sentry-prod.conf.template
   consent_lens_prod_conf:
     file: ./sites/consent-lens-prod.conf.template
   common_conf:
@@ -82,6 +84,8 @@ services:
       MAILDEV_BRIO_STAGING_TLS_KEY_FILE: ${MAILDEV_BRIO_STAGING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
+      - source: sentry_prod_conf
+        target: /etc/nginx/templates/sentry-prod.conf.template
       - source: consent_lens_prod_conf
         target: /etc/nginx/templates/consent-lens-prod.conf.template
       - source: common_conf
@@ -109,6 +113,7 @@ services:
       - source: maildev_brio_staging_conf
         target: /etc/nginx/templates/maildev-brio-staging.conf.template
     networks:
+      - sentry_prod_app
       - consent_lens_prod_app
       - prod_app
       - canary_app
@@ -123,6 +128,7 @@ services:
       - maildev_brio_staging_web
 
 networks:
+  sentry_prod_app:
   consent_lens_prod_app:
   prod_app:
   canary_app:

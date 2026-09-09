@@ -59,6 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 ./scripts/test-airloom-ingress.py
           python3 ./scripts/validate-credential-inventory.py ./deploy/credential-inventory.json
           python3 -m unittest ./tests/test_credential_sync.py
           python3 -m unittest ./tests/test_brio_nginx_control_receipt.py

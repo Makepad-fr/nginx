@@ -185,3 +185,11 @@ A failed update restores the previous service specification. The same helper
 supports `--check` for host-side syntax validation without deployment.
 
 The additive Brio ingress deployment also applies the `nginx -t` health check declared in `compose.yml` to older shared services. It verifies healthy convergence and retains the existing rollback behavior.
+
+## Airloom support website
+
+Airloom at `airloom.makepad.fr` uses the shared proxy and its dedicated encrypted attachable overlay `makepad_airloom_prod_app`. The app's `DEPLOY_APP_NETWORK` matches `MAKEPAD_PROXY_AIRLOOM_APP_NETWORK`. It serves static content at `airloom-prod-web:8080` with no published app ports.
+
+Provision the overlay with `docker network create --driver overlay --attachable --opt encrypted=true --label com.makepad.owner=Makepad-fr/nginx makepad_airloom_prod_app`. Deploy the reviewed Airloom container first. Run `scripts/deploy-airloom-ingress.py --bootstrap --check` then `--bootstrap` for HTTP/ACME. Issue the hostname certificate using the host's existing Certbot account and `/var/lib/letsencrypt` webroot. Run the script with `--check`, then without flags, for HTTPS. The existing Certbot timer and deploy hook renew certificates and reload the shared proxy.
+
+The scoped helper validates all current rendered routes before replacing only Airloom's config, checks service-version drift, preserves existing networks/mounts/environment/image, and checks health after convergence. Do not redeploy a stale full stack over live application-owned additions. Verify `/support`, `/privacy`, missing-path 404, HTTP redirect, TLS hostname/chain/expiry and unrelated public routes after deployment. Retain the prior service spec and image for rollback.

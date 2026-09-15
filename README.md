@@ -189,3 +189,7 @@ The additive Brio ingress deployment also applies the `nginx -t` health check de
 ## Makepad Scan
 
 Makepad Scan uses scan.makepad.fr and sites/scan.conf.template. Add the scanner application overlay (MAKEPAD_PROXY_SCAN_APP_NETWORK=makepad_scan_app) to the existing proxy and mount only the new virtual host. Validate all existing virtual hosts before reloading; preserve current image, networks and configuration mounts.
+
+## Pluck hostname
+
+Pluck uses `pluck.makepad.fr` (A: `135.181.141.31`) and `sites/pluck.conf.template`. Keep `sites/scan.conf.template` mounted for legacy apps and links. Both hosts proxy to the same protected scanner API without redirects between hosts. Issue the Pluck certificate using the existing `/var/lib/letsencrypt` webroot before adding the TLS virtual host. The existing Certbot renewal hook reloads the shared proxy. Add only the new immutable configuration to the running proxy, preserving its existing image, mounts, networks, and virtual hosts; rollback removes only that configuration. Validate the full live configuration before updating the service.

@@ -185,3 +185,7 @@ A failed update restores the previous service specification. The same helper
 supports `--check` for host-side syntax validation without deployment.
 
 The additive Brio ingress deployment also applies the `nginx -t` health check declared in `compose.yml` to older shared services. It verifies healthy convergence and retains the existing rollback behavior.
+
+## Makepad Scan
+
+Makepad Scan uses scan.makepad.fr and sites/scan.conf.template. Add the scanner application overlay (MAKEPAD_PROXY_SCAN_APP_NETWORK=makepad_scan_app) to the existing proxy and mount only the new virtual host. Validate all existing virtual hosts before reloading; preserve current image, networks and configuration mounts.

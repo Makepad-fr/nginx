@@ -1,0 +1,33 @@
+server {
+    listen 80;
+    server_name posey.makepad.fr;
+    access_log off;
+    location /.well-known/acme-challenge/ { root /var/lib/letsencrypt; }
+    location / { return 301 https://$host$request_uri; }
+}
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name posey.makepad.fr;
+    ssl_certificate /etc/letsencrypt/live/posey.makepad.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/posey.makepad.fr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    # Static landing page: no visitor access logs.
+    access_log off;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    add_header X-Frame-Options DENY always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" always;
+    client_max_body_size 1m;
+    location / {
+        set $posey_upstream http://posey-prod_web:8080;
+        proxy_pass $posey_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 30s;
+        proxy_connect_timeout 5s;
+    }
+}

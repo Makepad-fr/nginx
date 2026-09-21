@@ -195,3 +195,23 @@ Makepad Scan uses scan.makepad.fr and sites/scan.conf.template. Add the scanner 
 Pluck uses `pluck.makepad.fr` (A: `135.181.141.31`) and `sites/pluck.conf.template`. Keep `sites/scan.conf.template` mounted for legacy apps and links. Both hosts proxy to the same protected scanner API without redirects between hosts. Issue the Pluck certificate using the existing `/var/lib/letsencrypt` webroot before adding the TLS virtual host. The existing Certbot renewal hook reloads the shared proxy. Add only the new immutable configuration to the running proxy, preserving its existing image, mounts, networks, and virtual hosts; rollback removes only that configuration. Validate the full live configuration before updating the service.
 
 For the additive Pluck activation, run `python3 scripts/deploy-pluck-ingress.py` on the app VM from this checked-out repository after certificate issuance. It saves a protected pre-update snapshot, validates the full candidate Nginx configuration using the current image and network, detects concurrent service changes, preserves existing configuration IDs and networks, and rolls back a failed update. A second activation fails closed rather than adding duplicate routes.
+
+### Brio private event photos
+
+Brio's authenticated event create/edit routes allow 11 MB request bodies for a
+10 MB JPEG/PNG upload plus multipart fields; other routes retain the 1 MB limit.
+The application still enforces admin authorization, CSRF, decoded content and
+pixel limits.
+
+Only `/brio-staging-event-photos/brio/<64 lowercase hex characters>.jpg` is
+proxied over the private network to shared MinIO at `10.80.0.2:9000`. The public
+connection uses Brio's existing HTTPS certificate. Preserve the original Host
+and SigV4 headers; omit browser cookies and client address headers. All other
+paths under the bucket prefix return 404. The bucket remains private and Brio's
+service key must permit only GetObject/PutObject/DeleteObject on its `brio/*`
+prefix. Anonymous object reads must return 403 before rollout acceptance.
+
+This is a supporting change for Brio native stack #108. Apply through the
+existing additive Brio ingress helper after CI and candidate `nginx -t`, retain
+the previous service/config references, and verify neighboring routes unchanged.
+No global upload-limit increase, new public bucket or storage instance is added.

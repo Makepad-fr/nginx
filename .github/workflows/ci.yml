@@ -64,3 +64,4 @@ jobs:
           python3 -m unittest ./tests/test_brio_nginx_control_receipt.py
           ./scripts/test-runtrace-upload-policy.sh
           ./scripts/test-brio-staging-policy.sh
+          python3 ./scripts/test-brio-event-photos.py

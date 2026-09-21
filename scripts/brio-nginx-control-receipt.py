@@ -22,7 +22,7 @@ MAILDEV_HOST = "maildev-brio-staging.makepad.fr"
 BRIO_UPSTREAM = "http://brio-staging-app:8080"
 MAILDEV_UPSTREAM = "http://maildev-brio-staging:1080"
 MAILDEV_AUTH_UPSTREAM = "http://maildev-brio-staging-auth:4180"
-BRIO_CONFIG_SHA256 = "b03afcc8fd4fcccbe4c07c9c9712124f6ce8c0c03d52c66c55f68cdf8e5eecac"
+BRIO_CONFIG_SHA256 = "4d93f733dd44f711d96862c32207ba94c8485a358701e6b21c62e98cddf5c75c"
 MAILDEV_CONFIG_SHA256 = "f6ba6c58b75f836dca38a12430b1b15adec574709c2ff12c524bf7b31edd6a1a"
 COMMON_CONFIG_SHA256 = "308fe0d9f6424f51e386626ace48e49c1b47c88c60fee38dd60265d2a3e00e55"
 MAX_OUTPUT_BYTES = 512 * 1024
@@ -343,9 +343,18 @@ def normalize_control_receipt(
             "routes": {
                 "application": {
                     "hostname": BRIO_HOST,
-                    "locations": ["/", "/applications"],
+                    "locations": ["/", "/applications", "/admin/events[/{id}]"],
+                    "uploadBodyLimitBytes": 11534336,
                     "policySHA256": route_digests["application"],
                     "upstream": BRIO_UPSTREAM,
+                },
+                "eventStorage": {
+                    "hostname": BRIO_HOST,
+                    "location": "/brio-staging-event-photos/brio/{64-hex}.jpg",
+                    "upstream": "http://10.80.0.2:9000",
+                    "methods": ["GET", "HEAD", "PUT", "DELETE"],
+                    "cookieForwarding": False,
+                    "bodyLimitBytes": 11534336,
                 },
                 "mailCapture": {
                     "authUpstream": MAILDEV_AUTH_UPSTREAM,

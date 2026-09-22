@@ -70,6 +70,45 @@ server {
         proxy_set_header X-Request-ID $request_id;
     }
 
+    location ~ "^/admin/events(?:/[a-f0-9-]{36})?$" {
+        client_max_body_size 11m;
+        limit_req zone=brio_staging_general burst=40 nodelay;
+        set $brio_staging_upstream ${BRIO_STAGING_UPSTREAM};
+        proxy_pass $brio_staging_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_set_header Connection "";
+        proxy_set_header Host ${BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host ${BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Request-ID $request_id;
+    }
+
+    # Only Brio's opaque object prefix reaches shared MinIO. S3 SigV4 and a
+    # prefix-scoped service key remain mandatory; no bucket/list/admin API.
+    location ~ "^/brio-staging-event-photos/brio/[a-f0-9]{64}[.]jpg$" {
+        client_max_body_size 11m;
+        limit_except GET PUT DELETE { deny all; }
+        proxy_pass http://10.80.0.2:9000;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+        proxy_send_timeout 30s;
+        proxy_set_header Connection "";
+        proxy_set_header Host ${BRIO_STAGING_SERVER_NAME};
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Cookie "";
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+    }
+    location /brio-staging-event-photos/ { return 404; }
+
     location / {
         limit_req zone=brio_staging_general burst=40 nodelay;
         set $brio_staging_upstream ${BRIO_STAGING_UPSTREAM};

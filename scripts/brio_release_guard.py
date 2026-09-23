@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import re
 import stat
-import subprocess
 import sys
 import time
 
@@ -44,11 +43,14 @@ def deployment_guard():
                     raise RuntimeError('Malformed Brio release evidence lease')
                 if int(match[1]) > int(time.time()):
                     raise RuntimeError('Brio release evidence is active; ingress deployment is locked')
-        yield
+        yield guard.fileno()
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         raise SystemExit('usage: brio_release_guard.py COMMAND [ARG...]')
-    with deployment_guard():
-        raise SystemExit(subprocess.call(sys.argv[1:]))
+    with deployment_guard() as descriptor:
+        # Keep the same lock owner across exec; do not leave a child deployment
+        # running after a wrapper process exits or receives a signal.
+        os.set_inheritable(descriptor, True)
+        os.execvp(sys.argv[1], sys.argv[1:])

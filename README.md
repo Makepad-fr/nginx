@@ -215,3 +215,15 @@ This is a supporting change for Brio native stack #108. Apply through the
 existing additive Brio ingress helper after CI and candidate `nginx -t`, retain
 the previous service/config references, and verify neighboring routes unchanged.
 No global upload-limit increase, new public bucket or storage instance is added.
+
+### Visitaki restricted preview
+
+`envs/production/visitaki-preview.compose.yml` adds only `visitaki.com` and its
+`www` redirect to the existing proxy. It is deliberately outside the default
+production composition until Visitaki readiness is established. Its
+`MAKEPAD_PROXY_VISITAKI_APP_NETWORK` must equal Visitaki's `DEPLOY_APP_NETWORK`.
+The certificate must cover both names. Preserve all existing remote configs and
+network attachments when activating this overlay; record the current service
+specification before updating, validate `nginx -t`, verify both HTTPS names and
+neighboring routes, and roll back the service on a failed check. Do not enable
+request access logs: API paths can contain voucher and device values.

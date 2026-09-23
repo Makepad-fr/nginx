@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Add Brio staging routes to the existing shared ingress without replacing other projects."""
+from brio_release_guard import deployment_guard
 import argparse
 import base64
 import fcntl
@@ -26,7 +27,7 @@ def main():
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     os.umask(0o077)
-    with open('/tmp/makepad-brio-ingress.lock', 'a') as lock:
+    with deployment_guard(), open('/tmp/makepad-brio-ingress.lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         before = inspect()
         spec = before['Spec']['TaskTemplate']['ContainerSpec']

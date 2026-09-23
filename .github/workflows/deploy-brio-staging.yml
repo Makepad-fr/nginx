@@ -50,7 +50,7 @@ jobs:
           # shellcheck disable=SC2029
           ssh "${ssh_opts[@]}" "${remote}" "test ! -e '${remote_dir}' && install -d -m 0700 '${remote_dir}'"
           # shellcheck disable=SC2029
-          tar -cf - scripts/deploy-brio-ingress.py sites/00-common.conf.template sites/brio-staging.conf.template sites/maildev-brio-staging.conf.template envs/production/.env.proxy | \
+          tar -cf - scripts/deploy-brio-ingress.py scripts/brio_release_guard.py sites/00-common.conf.template sites/brio-staging.conf.template sites/maildev-brio-staging.conf.template envs/production/.env.proxy | \
             ssh "${ssh_opts[@]}" "${remote}" "tar -xf - -C '${remote_dir}'"
           # shellcheck disable=SC2029
           ssh "${ssh_opts[@]}" "${remote}" "python3 '${remote_dir}/scripts/deploy-brio-ingress.py'"

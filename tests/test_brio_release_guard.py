@@ -58,4 +58,17 @@ class ReleaseGuardTests(unittest.TestCase):
   except ValueError:pass
   with guard.deployment_guard():pass
 
+class GuardWiringTests(unittest.TestCase):
+ def test_scoped_deployment_guards_before_inspection(self):
+  source=(ROOT/'scripts/deploy-brio-ingress.py').read_text()
+  self.assertIn('from brio_release_guard import deployment_guard',source)
+  self.assertLess(source.index('with deployment_guard()'),source.index('before = inspect()'))
+  workflow=(ROOT/'.github/workflows/deploy-brio-staging.yml').read_text()
+  self.assertIn('scripts/deploy-brio-ingress.py scripts/brio_release_guard.py',workflow)
+ def test_shared_deployment_wraps_entire_remote_mutation(self):
+  workflow=(ROOT/'.github/workflows/manual-deploy.yml').read_text()
+  self.assertIn('scripts/brio_release_guard.py "${remote_target}:${guard_script}"',workflow)
+  self.assertIn('python3 "${guard_script}" bash -se --',workflow)
+  self.assertLess(workflow.index('python3 "${guard_script}" bash -se --'),workflow.index('docker stack deploy'))
+
 if __name__=='__main__':unittest.main()

@@ -218,11 +218,16 @@ No global upload-limit increase, new public bucket or storage instance is added.
 
 ### Visitaki restricted preview
 
-`envs/production/visitaki-preview.compose.yml` adds only `visitaki.com` and its
-`www` redirect to the existing proxy. It is deliberately outside the default
+`envs/production/visitaki-preview.compose.yml` adds `visitaki.com`, its
+`www` redirect, and `auth.visitaki.com` to the existing proxy. It is deliberately outside the default
 production composition until Visitaki readiness is established. Its
 `MAKEPAD_PROXY_VISITAKI_APP_NETWORK` must equal Visitaki's `DEPLOY_APP_NETWORK`.
-The certificate must cover both names. Preserve all existing remote configs and
+The apex certificate must cover both apex and www names. Identity requires its own
+`/etc/letsencrypt/live/auth.visitaki.com/` certificate and the dedicated
+`makepad_keycloak_visitaki_proxy` overlay on the application host. Only Visitaki
+realm and theme resources are public; administrative, other-realm, health and
+metrics endpoints return 404. Identity access logs are disabled and client IP
+headers are cleared. Preserve all existing remote configs and
 network attachments when activating this overlay; record the current service
 specification before updating, validate `nginx -t`, verify both HTTPS names and
 neighboring routes, and roll back the service on a failed check. Do not enable

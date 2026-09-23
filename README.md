@@ -244,3 +244,8 @@ configuration, preserves unrelated settings and networks, and records the prior
 service specification for rollback. Test HTTPS externally and verify neighboring
 routes before declaring delivery. The application overlay network is
 `makepad_visitaki_preview_app`.
+
+Sanitized receipts are written to the deployment log and workflow summary;
+artifact uploads are supplementary because the organization can exhaust its
+artifact storage quota. Copy the successful receipt into the release record and
+verify live state. A failed deployment or failed summary step still fails the job.

@@ -64,8 +64,11 @@ jobs:
           DEPLOY_SSH_HOST: ${{ vars.NGINX_DEPLOY_HOST }}
           VISITAKI_INGRESS_PHASE: ${{ inputs.phase }}
         run: python3 scripts/deploy-visitaki-ingress.py "$VISITAKI_INGRESS_PHASE" --receipt "$RUNNER_TEMP/visitaki-ingress.json"
-      - name: Preserve deployment and rollback receipts
+      - name: Publish sanitized receipt in workflow summary
+        run: cat "$RUNNER_TEMP/visitaki-ingress.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve supplementary deployment and rollback artifacts
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: visitaki-ingress-${{ github.run_id }}

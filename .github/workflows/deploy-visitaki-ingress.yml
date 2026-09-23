@@ -1,0 +1,78 @@
+name: Deploy Visitaki ingress
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Reviewed Visitaki ingress phase
+        type: choice
+        options: [bootstrap, identity, app]
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: nginx-production-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'Makepad-fr/nginx' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64, makepad]
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Verify exact source and ingress isolation
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          bash scripts/test-visitaki-ingress.sh
+          python3 -m unittest discover -s tests -p test_visitaki_ingress.py
+      - name: Prepare isolated SSH transport and registry configuration
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_SSH_HOST: ${{ vars.NGINX_DEPLOY_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.NGINX_DEPLOY_USER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SSH_HOST" == 135.181.141.31 && "$DEPLOY_SSH_USER" == makepad ]]
+          [[ -n "$DEPLOY_SSH_PRIVATE_KEY" && -n "$DEPLOY_SSH_KNOWN_HOSTS" ]]
+          export DOCKER_CONFIG="$RUNNER_TEMP/visitaki-docker-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG" >> "$GITHUB_ENV"
+          directory="$RUNNER_TEMP/visitaki-ssh-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          [[ ! -e "$directory" && ! -e "$DOCKER_CONFIG" ]]
+          install -d -m 0700 "$directory/bin" "$DOCKER_CONFIG"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$directory/private"
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$directory/known_hosts"
+          chmod 0600 "$directory/private" "$directory/known_hosts"
+          printf -v ssh_binary %q "$(command -v ssh)"
+          printf -v private_file %q "$directory/private"
+          printf -v known_hosts %q "$directory/known_hosts"
+          printf '%s\n' '#!/usr/bin/env bash' "exec $ssh_binary -F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known_hosts -o GlobalKnownHostsFile=/dev/null -o IdentitiesOnly=yes -i $private_file \"\$@\"" > "$directory/bin/ssh"
+          chmod 0700 "$directory/bin/ssh"
+          echo "$directory/bin" >> "$GITHUB_PATH"
+      - name: Select the protected application-host Docker context
+        uses: Makepad-fr/docker-context-switch-action@64d2ca53cf0982f1b2181bfb9185c722019af828
+        with:
+          environment: production
+          server_ip_address: ${{ vars.NGINX_DEPLOY_HOST }}
+          server_ssh_user: ${{ vars.NGINX_DEPLOY_USER }}
+          context_name: visitaki-ingress-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Apply only the selected Visitaki routes
+        env:
+          DEPLOY_SSH_HOST: ${{ vars.NGINX_DEPLOY_HOST }}
+          VISITAKI_INGRESS_PHASE: ${{ inputs.phase }}
+        run: python3 scripts/deploy-visitaki-ingress.py "$VISITAKI_INGRESS_PHASE" --receipt "$RUNNER_TEMP/visitaki-ingress.json"
+      - name: Preserve deployment and rollback receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: visitaki-ingress-${{ github.run_id }}
+          path: ${{ runner.temp }}/visitaki-ingress*.json
+          if-no-files-found: warn
+      - name: Remove runner credentials
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/visitaki-ssh-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          rm -f -- "$DOCKER_CONFIG/config.json"

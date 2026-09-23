@@ -232,3 +232,15 @@ network attachments when activating this overlay; record the current service
 specification before updating, validate `nginx -t`, verify both HTTPS names and
 neighboring routes, and roll back the service on a failed check. Do not enable
 request access logs: API paths can contain voucher and device values.
+
+The manual `Deploy Visitaki ingress` workflow uses the existing protected
+`production` environment and the same deployment concurrency group as the shared
+proxy release. Run `bootstrap` first: it adds only HTTP challenge handling and
+503 responses for the three Visitaki hosts. Point their DNS at the application
+host and issue certificates with the existing Certbot webroot and renewal hook.
+Then run `identity` after the dedicated instance is healthy, and `app` after API
+compatibility checks pass. Each phase validates the complete live candidate
+configuration, preserves unrelated settings and networks, and records the prior
+service specification for rollback. Test HTTPS externally and verify neighboring
+routes before declaring delivery. The application overlay network is
+`makepad_visitaki_preview_app`.

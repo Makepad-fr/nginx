@@ -359,6 +359,37 @@ jobs:
             exit 1
           fi
           prior_spec_sha=$(sha256sum "${prior_spec}" | awk '{print $1}')
+          # Preserve the opt-in Visitaki phase across ordinary shared releases.
+          docker compose -f "${remote_dir}/stack.yml" config --format json > "${remote_dir}/stack.json"
+          python3 - "${prior_spec}" "${remote_dir}/stack.json" "${remote_dir}/stack.yml" <<'PY'
+          import json
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          before = json.loads(Path(sys.argv[1]).read_text())
+          stack = json.loads(Path(sys.argv[2]).read_text())
+          stack.pop('name', None)
+          service = stack['services']['nginx']
+          targets = {'/etc/nginx/templates/visitaki-identity.conf.template', '/etc/nginx/templates/visitaki-preview.conf.template'}
+          for config in before['TaskTemplate']['ContainerSpec'].get('Configs', []):
+              if config['File']['Name'] not in targets:
+                  continue
+              assert config['ConfigName'].startswith('visitaki_'), 'Unowned Visitaki ingress config'
+              name = config['ConfigName']
+              stack.setdefault('configs', {})[name] = {'external': True, 'name': name}
+              entry = {'source': name, 'target': config['File']['Name'], 'mode': config['File']['Mode']}
+              assert not any(c.get('target') == entry['target'] for c in service.get('configs', [])), 'Duplicate Visitaki target'
+              service.setdefault('configs', []).append(entry)
+          for network in before['TaskTemplate'].get('Networks', []):
+              item = json.loads(subprocess.check_output(['docker', 'network', 'inspect', network['Target']]))[0]
+              name = item['Name']
+              if name not in {'makepad_keycloak_visitaki_proxy', 'makepad_visitaki_preview_app'}:
+                  continue
+              stack.setdefault('networks', {})[name] = {'external': True, 'name': name}
+              service.setdefault('networks', {})[name] = {'aliases': network.get('Aliases', [])}
+          Path(sys.argv[3]).write_text(json.dumps(stack))
+          PY
           prior_image=$(docker service inspect "${nginx_service}" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
           rollout_started=false
 

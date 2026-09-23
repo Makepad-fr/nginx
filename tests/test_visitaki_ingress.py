@@ -1,5 +1,8 @@
 import importlib.util
+import json
 from pathlib import Path
+import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -35,6 +38,28 @@ class ScopedUpdates(unittest.TestCase):
         self.assertIn('return 503', route)
         self.assertIn('/.well-known/acme-challenge/', route)
         self.assertNotIn('proxy_pass', route)
+
+    def test_shared_release_retains_deployed_visitaki_phase(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/manual-deploy.yml').read_text()
+        block = workflow.split('python3 - "${prior_spec}" "${remote_dir}/stack.json" "${remote_dir}/stack.yml" <<\'PY\'\n', 1)[1].split('\n          PY', 1)[0]
+        code = textwrap.dedent(block)
+        before = {'TaskTemplate': {'ContainerSpec': {'Configs': [{
+            'ConfigName': 'visitaki_identity_revision',
+            'File': {'Name': '/etc/nginx/templates/visitaki-identity.conf.template', 'Mode': 292},
+        }]}, 'Networks': [{'Target': 'identity-network', 'Aliases': ['edge']}]}}
+        base = {'services': {'nginx': {'image': 'existing', 'configs': [{'source': 'neighbor', 'target': '/neighbor'}], 'networks': {'neighbor': {}}}}, 'configs': {'neighbor': {'external': True}}}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'before').write_text(json.dumps(before))
+            (root / 'base').write_text(json.dumps(base))
+            with patch('sys.argv', ['inline', str(root / 'before'), str(root / 'base'), str(root / 'result')]), patch('subprocess.check_output', return_value=b'[{"Name":"makepad_keycloak_visitaki_proxy"}]'):
+                exec(compile(code, 'shared-release-retention', 'exec'), {})
+            result = json.loads((root / 'result').read_text())
+        self.assertEqual(result['configs']['visitaki_identity_revision'], {'external': True, 'name': 'visitaki_identity_revision'})
+        self.assertEqual(result['services']['nginx']['configs'][0], base['services']['nginx']['configs'][0])
+        self.assertEqual(result['services']['nginx']['image'], 'existing')
+        self.assertIn('neighbor', result['services']['nginx']['networks'])
+        self.assertIn('makepad_keycloak_visitaki_proxy', result['services']['nginx']['networks'])
 
 
 if __name__ == '__main__':

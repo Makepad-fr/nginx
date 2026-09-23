@@ -66,7 +66,7 @@ def changes_for(before, routes, networks):
             continue
         if previous:
             assert previous[0]['ConfigName'].startswith('visitaki_'), 'Unowned config at Visitaki target'
-            changes.extend(['--config-rm', previous[0]['ConfigID']])
+            changes.extend(['--config-rm', previous[0]['ConfigName']])
             removed.append(previous[0]['ConfigID'])
         changes.extend(['--config-add', f'source={name},target={target},mode=0444'])
         added.append((name, content))

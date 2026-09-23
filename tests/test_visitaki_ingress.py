@@ -20,6 +20,7 @@ class ScopedUpdates(unittest.TestCase):
         previous = {'ConfigID': 'bootstrap', 'ConfigName': 'visitaki_bootstrap', 'File': {'Name': '/etc/nginx/templates/visitaki-identity.conf.template'}}
         changes, removed, added = module.changes_for(self.baseline([unrelated, previous]), {'visitaki-identity': 'new'}, [])
         self.assertEqual(removed, ['bootstrap'])
+        self.assertEqual(changes[:2], ['--config-rm', 'visitaki_bootstrap'])
         self.assertNotIn('neighbor-config', changes)
         self.assertEqual(len(added), 1)
 

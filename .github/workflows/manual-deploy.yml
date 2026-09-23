@@ -183,7 +183,10 @@ jobs:
           scp "${scp_opts[@]}" "${bundle_root}/sites/brio-staging.conf.template" "${remote_target}:${REMOTE_DIR}/sites/brio-staging.conf.template"
           scp "${scp_opts[@]}" "${bundle_root}/sites/maildev-brio-staging.conf.template" "${remote_target}:${REMOTE_DIR}/sites/maildev-brio-staging.conf.template"
 
-          ssh "${ssh_opts[@]}" "${remote_target}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" "${REMOTE_HOST}" <<'EOF'
+          [[ "${GITHUB_RUN_ID}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
+          guard_script="${REMOTE_DIR}/brio-release-guard-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.py"
+          scp "${scp_opts[@]}" scripts/brio_release_guard.py "${remote_target}:${guard_script}"
+          ssh "${ssh_opts[@]}" "${remote_target}" python3 "${guard_script}" bash -se -- "${REMOTE_DIR}" "${STACK_NAME}" "${REMOTE_HOST}" <<'EOF'
           set -euo pipefail
           remote_dir=$1
           stack_name=$2

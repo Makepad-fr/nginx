@@ -249,3 +249,17 @@ Sanitized receipts are written to the deployment log and workflow summary;
 artifact uploads are supplementary because the organization can exhaust its
 artifact storage quota. Copy the successful receipt into the release record and
 verify live state. A failed deployment or failed summary step still fails the job.
+
+### Brio release coordination
+
+Both the scoped Brio ingress deployment and the full shared-proxy deployment
+reuse the already installed `/run/lock/brio-release-evidence.guard` and
+`brio-release-evidence.lease` authority. They reject an active recording, a
+concurrent app deployment, malformed leases and unsafe file ownership before
+changing the proxy. The lock is held through verification and rollback and is
+released when the process exits. A missing authority fails closed.
+
+This replaces the undeployed second cross-host coordinator proposed in old
+PRs #14–#16. No KVM/JIT runners, new GitHub Apps, root credentials, host users or
+second lease authority are required. The current protected runner and credential
+inventory remain unchanged. The helper itself contains no secrets.

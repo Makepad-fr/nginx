@@ -1,15 +1,23 @@
 # Additive overlay: opt in only after the Visitaki API and TLS preflight pass.
 configs:
+  visitaki_identity_conf:
+    file: ./sites/visitaki-identity.conf.template
   visitaki_preview_conf:
     file: ./sites/visitaki-preview.conf.template
 services:
   nginx:
     configs:
+      - source: visitaki_identity_conf
+        target: /etc/nginx/templates/visitaki-identity.conf.template
       - source: visitaki_preview_conf
         target: /etc/nginx/templates/visitaki-preview.conf.template
     networks:
+      - visitaki_identity
       - visitaki_preview_app
 networks:
+  visitaki_identity:
+    external: true
+    name: makepad_keycloak_visitaki_proxy
   visitaki_preview_app:
     external: true
     name: ${MAKEPAD_PROXY_VISITAKI_APP_NETWORK:?set Visitaki proxy network}

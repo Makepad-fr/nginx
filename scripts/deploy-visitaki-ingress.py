@@ -159,6 +159,7 @@ def main():
                 'service_version': after['Version']['Index'], 'existing_configuration_preserved': True,
                 'configs': [name for name, _ in added], 'neighbor_status': neighbors,
                 'external_route_smoke': True, 'passed': True}, indent=2))
+            print(receipt.read_text())
         except BaseException:
             if inspect()['Version']['Index'] != before['Version']['Index']:
                 run('docker', 'service', 'rollback', '--detach=false', SERVICE)

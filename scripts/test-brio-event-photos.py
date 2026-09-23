@@ -38,10 +38,13 @@ server { listen 8082; client_max_body_size 20m; add_header X-Fixture-Host $host 
    except (OSError,urllib.error.URLError):pass
    time.sleep(.1)
   medium=b'x'*(2<<20)
-  for path in ['/admin/events','/admin/events/11111111-1111-4111-8111-111111111111']:
+  for path in ['/admin/events','/admin/events/11111111-1111-4111-8111-111111111111','/admin/photo-library']:
    assert request(path,'POST',medium)[0]==204, 'allowed upload blocked'
   assert request('/unrelated','POST',medium)[0]==413,'global limit widened'
-  assert request('/admin/events','POST',b'x'*(12<<20))[0]==413,'oversized upload accepted'
+  for path in ['/admin/events', '/admin/photo-library']:
+   assert request(path,'POST',b'x'*(12<<20))[0]==413,'oversized upload accepted'
+  for path in ['/admin/photo-library/anything', '/admin/photo-library-extra']:
+   assert request(path,'POST',medium)[0]==413,'library limit escaped its exact route'
   key='/brio-staging-event-photos/brio/'+'a'*64+'.jpg'
   assert request(key)[0]==403,'unsigned object request bypassed storage authentication'
   status,headers,body=request(key,headers={'Authorization':'fixture-signature','Cookie':'must-not-reach-storage=1'})

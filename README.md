@@ -153,8 +153,8 @@ requires:
 
 - `/etc/letsencrypt/live/brio-staging.makepad.fr/fullchain.pem`
 - `/etc/letsencrypt/live/brio-staging.makepad.fr/privkey.pem`
-- `/etc/letsencrypt/live/maildev-brio-staging.makepad.fr/fullchain.pem`
-- `/etc/letsencrypt/live/maildev-brio-staging.makepad.fr/privkey.pem`
+- `/etc/letsencrypt/live/maildev.makepad.fr/fullchain.pem`
+- `/etc/letsencrypt/live/maildev.makepad.fr/privkey.pem`
 
 DNS must point both names to the proxy host before certificate issuance. The
 deployment requires each certificate to cover its hostname, chain to the host

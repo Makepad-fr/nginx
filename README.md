@@ -263,3 +263,9 @@ This replaces the undeployed second cross-host coordinator proposed in old
 PRs #14–#16. No KVM/JIT runners, new GitHub Apps, root credentials, host users or
 second lease authority are required. The current protected runner and credential
 inventory remain unchanged. The helper itself contains no secrets.
+
+## Pocket Gremlin ingress
+
+`pocketgremlin.makepad.fr` routes to the existing Makepad landing service at its `/pocket-gremlin/` path. DNS is an A record pointing to the app proxy; the certificate is a dedicated Let's Encrypt webroot certificate in `/etc/letsencrypt/live/pocketgremlin.makepad.fr/`. The site provides `/`, `/privacy/`, and `/support/`.
+
+The live edge contains additive virtual hosts that are not all represented in this repository's Compose baseline. After the landing image is deployed and the certificate exists, run `python3 scripts/deploy-pocket-gremlin-ingress.py` on the app VM from a checkout of this revision. The script checks DNS, certificate, overlay network, and the full candidate Nginx configuration, then adds only the new Docker config to `makepad-edge_nginx`. It preserves existing configs, networks, mounts, image and environment, rolls back a failed update, and verifies all three HTTPS pages. A repeat run fails closed.

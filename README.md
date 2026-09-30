@@ -286,3 +286,20 @@ not activate the dormant overlay. Production `vif.io` is unchanged.
 The local Nginx integration fixture checks actual host/path dispatch, prefix
 boundaries, forwarding-header redaction, CNAME denial, robots and staging
 headers without exposing host ports. It is not browser or live-staging evidence.
+
+Run `scripts/provision-vif-platform-edge.sh` on the existing app-host Swarm
+manager before starting the platform; it refuses a mismatched existing network.
+The platform overlay name is inventoried as the app-scoped
+`MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK` secret in this shared repo's
+protected infrastructure environment, sourced from the same Proton Pass field
+as the application's `VIF_PLATFORM_EDGE_NETWORK`.
+
+After the staging services and certificate are ready, invoke the existing scoped
+installer with `--vif-staging --check`, then `--vif-staging`. This selects only the
+new route and platform edge network, retaining the old Brio/MailDev routes and
+all production configurations. Supply the inventoried overlay setting in the
+protected operator's proxy environment file. The installer holds the Brio
+release lock, validates the combined Nginx configuration with existing mounts,
+verifies unchanged shared resources, and refuses to roll back an unrelated
+concurrent update. The caller must bind the operator run to reviewed source and
+its passing CI and retain the source/configuration identifiers in Slack evidence.

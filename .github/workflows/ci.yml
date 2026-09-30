@@ -65,6 +65,7 @@ jobs:
           python3 -m unittest ./tests/test_brio_release_guard.py
           python3 -m unittest ./tests/test_visitaki_ingress.py
           ./scripts/test-visitaki-ingress.sh
+          ./scripts/test-vif-staging-ingress.sh
           ./scripts/test-runtrace-upload-policy.sh
           ./scripts/test-brio-staging-policy.sh
           python3 ./scripts/test-brio-event-photos.py

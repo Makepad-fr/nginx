@@ -374,11 +374,11 @@ jobs:
           stack = json.loads(Path(sys.argv[2]).read_text())
           stack.pop('name', None)
           service = stack['services']['nginx']
-          targets = {'/etc/nginx/templates/visitaki-identity.conf.template', '/etc/nginx/templates/visitaki-preview.conf.template'}
+          targets = {'/etc/nginx/templates/visitaki-identity.conf.template': 'visitaki_', '/etc/nginx/templates/visitaki-preview.conf.template': 'visitaki_', '/etc/nginx/templates/vif-staging.conf.template': 'vif_staging_'}
           for config in before['TaskTemplate']['ContainerSpec'].get('Configs', []):
               if config['File']['Name'] not in targets:
                   continue
-              assert config['ConfigName'].startswith('visitaki_'), 'Unowned Visitaki ingress config'
+              assert config['ConfigName'].startswith(targets[config['File']['Name']]), 'Unowned opt-in ingress config'
               name = config['ConfigName']
               stack.setdefault('configs', {})[name] = {'external': True, 'name': name}
               entry = {'source': name, 'target': config['File']['Name'], 'mode': config['File']['Mode']}
@@ -387,7 +387,7 @@ jobs:
           for network in before['TaskTemplate'].get('Networks', []):
               item = json.loads(subprocess.check_output(['docker', 'network', 'inspect', network['Target']]))[0]
               name = item['Name']
-              if name not in {'makepad_keycloak_visitaki_proxy', 'makepad_visitaki_preview_app'}:
+              if name not in {'makepad_keycloak_visitaki_proxy', 'makepad_visitaki_preview_app', 'makepad_vif_platform_staging_edge'}:
                   continue
               stack.setdefault('networks', {})[name] = {'external': True, 'name': name}
               service.setdefault('networks', {})[name] = {'aliases': network.get('Aliases', [])}

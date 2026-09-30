@@ -1,0 +1,16 @@
+# Apply only after the reviewed staging migration, runtime and TLS checks pass.
+configs:
+  vif_staging_conf:
+    file: ./sites/vif-staging.conf.template
+services:
+  nginx:
+    configs:
+      - source: vif_staging_conf
+        target: /etc/nginx/templates/vif-staging.conf.template
+    networks:
+      - brio_staging_app
+      - vif_platform_staging_app
+networks:
+  vif_platform_staging_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK:?set isolated platform edge network}

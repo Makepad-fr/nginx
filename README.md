@@ -263,3 +263,26 @@ This replaces the undeployed second cross-host coordinator proposed in old
 PRs #14–#16. No KVM/JIT runners, new GitHub Apps, root credentials, host users or
 second lease authority are required. The current protected runner and credential
 inventory remain unchanged. The helper itself contains no secrets.
+
+### Vif staging routes (explicit opt-in)
+
+`sites/vif-staging.conf.template` reserves `/walking-club` for the existing Brio
+app and `/platform` for the isolated Vif platform. `/` is an empty 204 response;
+unknown paths and unapproved hosts fail closed. The CNAME target
+`domains.staging.vif.io` serves ACME challenges but never community content.
+All HTTPS responses carry `noindex`; forwarding headers are overwritten or
+removed, and the existing privacy log format excludes URLs and identities.
+
+The dormant `envs/production/vif-staging.compose.yml` overlay requires
+`MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK=makepad_vif_platform_staging_edge`,
+matching the application platform edge network. Store it in the protected GitHub
+Environment and Proton Pass before deployment. Shared ingress owns the encrypted
+attachable overlay; the platform application attaches to it. Use the existing
+Brio deployment lock and a scoped, reviewed ingress update with an immutable
+`vif_staging_` config after runtime, migration and TLS verification. The ordinary
+shared release retains an installed Vif route and its platform network but does
+not activate the dormant overlay. Production `vif.io` is unchanged.
+
+The local Nginx integration fixture checks actual host/path dispatch, prefix
+boundaries, forwarding-header redaction, CNAME denial, robots and staging
+headers without exposing host ports. It is not browser or live-staging evidence.

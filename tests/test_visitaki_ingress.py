@@ -61,6 +61,21 @@ class ScopedUpdates(unittest.TestCase):
         self.assertEqual(result['services']['nginx']['image'], 'existing')
         self.assertIn('neighbor', result['services']['nginx']['networks'])
         self.assertIn('makepad_keycloak_visitaki_proxy', result['services']['nginx']['networks'])
+        before['TaskTemplate']['ContainerSpec']['Configs'][0] = {
+            'ConfigName': 'vif_staging_verified_revision',
+            'File': {'Name': '/etc/nginx/templates/vif-staging.conf.template', 'Mode': 292},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'before').write_text(json.dumps(before))
+            (root / 'base').write_text(json.dumps(base))
+            with patch('sys.argv', ['inline', str(root / 'before'), str(root / 'base'), str(root / 'result')]), patch('subprocess.check_output', return_value=b'[{"Name":"makepad_vif_platform_staging_edge"}]'):
+                exec(compile(code, 'vif-release-retention', 'exec'), {})
+            result = json.loads((root / 'result').read_text())
+        self.assertIn('vif_staging_verified_revision', result['configs'])
+        self.assertIn('makepad_vif_platform_staging_edge', result['services']['nginx']['networks'])
+        self.assertEqual(result['services']['nginx']['image'], 'existing')
+
 
 
 if __name__ == '__main__':

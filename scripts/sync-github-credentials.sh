@@ -360,6 +360,7 @@ elif destination.startswith("MAKEPAD_PROXY_"):
         raise SystemExit("Docker network name is invalid")
     exact = {
         "MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK": "makepad_brio_staging_app",
+        "MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK": "makepad_vif_platform_staging_edge",
         "MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK": "makepad_brio_staging_maildev_web",
     }
     if destination in exact and text != exact[destination]:

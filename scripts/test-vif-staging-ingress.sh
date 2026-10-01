@@ -20,7 +20,7 @@ route+='\n'+Path('sites/brio-vif-redirects.conf.template').read_text().replace('
 assert 'vif-staging.conf.template' not in Path('compose.yml').read_text()
 stubs=''
 for port, name in [(8081,'community'),(8082,'platform')]:
- stubs+='server { listen '+str(port)+'; location / { return 200 "'+name+'|$request_uri|$http_host|$http_x_forwarded_host|$http_forwarded|$http_x_forwarded_for|$http_x_real_ip"; } }\n'
+ stubs+='server { listen '+str(port)+'; add_header X-Fixture-Method $request_method always; add_header X-Fixture-Stripe $http_stripe_signature always; add_header X-Fixture-Tally $http_tally_signature always; add_header X-Fixture-Cookie $http_cookie always; add_header X-Fixture-Authorization $http_authorization always; location / { return 200 "'+name+'|$request_uri|$http_host|$http_x_forwarded_host|$http_forwarded|$http_x_forwarded_for|$http_x_real_ip"; } }\n'
 Path(sys.argv[1]).write_text('events {}\nhttp {\n# Brio logs'+common+'\n'+route+'\n'+stubs+'\n}\n')
 PY
 container=$(docker create --network none --entrypoint nginx \
@@ -55,7 +55,9 @@ for path, location in [('/events?day=test','https://staging.vif.io/walking-club/
 for provider in ['stripe','tally']:
  path='/webhooks/'+provider
  assert '405' in request(path,'brio-staging.makepad.fr')[1]
- body,headers=request(path,'brio-staging.makepad.fr',('--post-data','synthetic=payload'))
+ body,headers=request(path,'brio-staging.makepad.fr',('--post-data','synthetic=payload','--header','Stripe-Signature: synthetic-stripe','--header','Tally-Signature: synthetic-tally','--header','Cookie: obsolete=session','--header','Authorization: Bearer obsolete'))
+ assert 'X-Fixture-Method: POST' in headers and 'X-Fixture-Stripe: synthetic-stripe' in headers and 'X-Fixture-Tally: synthetic-tally' in headers,headers
+ assert 'X-Fixture-Cookie:' not in headers and 'X-Fixture-Authorization:' not in headers,headers
  assert body=='community|/walking-club'+path+'|staging.vif.io|staging.vif.io|||',(body,headers)
 assert '405' in request('/admin/events','brio-staging.makepad.fr',('--post-data','synthetic=payload'))[1]
 print('Vif staging routing, exact path boundaries, forwarding-header sanitization, CNAME rejection and noindex checks passed.')

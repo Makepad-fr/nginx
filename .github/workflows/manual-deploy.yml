@@ -375,7 +375,11 @@ jobs:
           stack.pop('name', None)
           service = stack['services']['nginx']
           targets = {'/etc/nginx/templates/visitaki-identity.conf.template': 'visitaki_', '/etc/nginx/templates/visitaki-preview.conf.template': 'visitaki_', '/etc/nginx/templates/vif-staging.conf.template': 'vif_staging_'}
+          legacy_target = '/etc/nginx/templates/brio-staging.conf.template'
           for config in before['TaskTemplate']['ContainerSpec'].get('Configs', []):
+              if config['File']['Name'] == legacy_target and config['ConfigName'].startswith('vif_staging_'):
+                  targets[legacy_target] = 'vif_staging_'
+                  service['configs'] = [c for c in service.get('configs', []) if c.get('target') != legacy_target]
               if config['File']['Name'] not in targets:
                   continue
               assert config['ConfigName'].startswith(targets[config['File']['Name']]), 'Unowned opt-in ingress config'

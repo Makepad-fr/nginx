@@ -21,11 +21,13 @@ def run(*args, **kwargs):
 def inspect():
     return json.loads(run('docker', 'service', 'inspect', SERVICE))[0]
 
-def selection(vif_staging, settings):
+def selection(vif_staging, settings, legacy_cutover=False):
+    if legacy_cutover and not vif_staging:
+        raise RuntimeError("Legacy cutover requires the explicit Vif staging target")
     if vif_staging:
         if settings.get('MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK') != 'makepad_vif_platform_staging_edge':
             raise RuntimeError('Vif staging requires its dedicated inventoried edge network')
-        return ('vif-staging.conf.template',), ['makepad_brio_staging_app', 'makepad_vif_platform_staging_edge']
+        return (('vif-staging.conf.template','brio-staging.conf.template') if legacy_cutover else ('vif-staging.conf.template',)), ['makepad_brio_staging_app', 'makepad_vif_platform_staging_edge']
     return ('brio-staging.conf.template', 'maildev-brio-staging.conf.template'), ['makepad_brio_staging_app', 'makepad_brio_staging_maildev_web']
 
 
@@ -41,6 +43,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--vif-staging", action="store_true")
+    parser.add_argument("--legacy-cutover", action="store_true")
     args = parser.parse_args()
     os.umask(0o077)
     with deployment_guard(), open('/tmp/makepad-brio-ingress.lock', 'a') as lock:
@@ -52,11 +55,12 @@ def main():
             raise RuntimeError('Expected one local shared ingress container')
         current = containers[0]
         settings = dict(line.split('=', 1) for line in (ROOT/'envs/production/.env.proxy').read_text().splitlines() if line and not line.startswith('#') and '=' in line)
-        names, networks = selection(args.vif_staging, settings)
+        names, networks = selection(args.vif_staging, settings, args.legacy_cutover)
         targets = set(names) | {'02-brio-common.conf.template'}
         rendered = {}
         for name in names:
-            rendered[name] = re.sub(r'\$\{([A-Z][A-Z0-9_]*)\}', lambda m: settings[m[1]], (ROOT/'sites'/name).read_text())
+            source_name = 'brio-vif-redirects.conf.template' if args.legacy_cutover and name == 'brio-staging.conf.template' else name
+            rendered[name] = re.sub(r'\$\{([A-Z][A-Z0-9_]*)\}', lambda m: settings[m[1]], (ROOT/'sites'/source_name).read_text())
         common = (ROOT/'sites/00-common.conf.template').read_text()
         rendered['02-brio-common.conf.template'] = common[common.index('# Brio logs'):]
         previous_configs = spec.get('Configs', [])
@@ -99,7 +103,7 @@ def main():
                     changes.extend(['--config-rm', config['ConfigName']])
             for name, content in rendered.items():
                 digest = hashlib.sha256(content.encode()).hexdigest()[:16]
-                config_name = ('vif_staging_' if args.vif_staging and name.startswith('vif-') else 'brio_')+name.replace('.', '_')+'_'+digest
+                config_name = ('vif_staging_' if args.vif_staging and (name.startswith('vif-') or args.legacy_cutover and name == 'brio-staging.conf.template') else 'brio_')+name.replace('.', '_')+'_'+digest
                 exists = subprocess.run(['docker', 'config', 'inspect', config_name], capture_output=True)
                 if exists.returncode:
                     run('docker', 'config', 'create', '--label', 'com.makepad.owner=Makepad-fr/nginx', config_name, '-', input=content.encode())

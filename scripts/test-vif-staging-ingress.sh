@@ -9,11 +9,14 @@ mkdir -p "$fixture/etc/letsencrypt/live/staging.vif.io"
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=staging.vif.io' \
   -keyout "$fixture/etc/letsencrypt/live/staging.vif.io/privkey.pem" \
   -out "$fixture/etc/letsencrypt/live/staging.vif.io/fullchain.pem" >/dev/null 2>&1
+mkdir -p "$fixture/etc/letsencrypt/live/brio-staging.makepad.fr"
+cp "$fixture/etc/letsencrypt/live/staging.vif.io/"*.pem "$fixture/etc/letsencrypt/live/brio-staging.makepad.fr/"
 python3 - "$fixture/nginx.conf" <<'PY'
 from pathlib import Path
 import sys
 common=Path('sites/00-common.conf.template').read_text().split('# Brio logs',1)[1]
 route=Path('sites/vif-staging.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081').replace('http://vif-platform-staging-app:8080','http://127.0.0.1:8082')
+route+='\n'+Path('sites/brio-vif-redirects.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081')
 assert 'vif-staging.conf.template' not in Path('compose.yml').read_text()
 stubs=''
 for port, name in [(8081,'community'),(8082,'platform')]:
@@ -29,8 +32,8 @@ docker start "$container" >/dev/null
 python3 - "$container" <<'PY'
 import subprocess,sys,time
 container=sys.argv[1]
-def request(path,host='staging.vif.io'):
- r=subprocess.run(['docker','exec',container,'wget','-T','5','-S','-O','-','--no-check-certificate','--header','Host: '+host,'--header','X-Forwarded-Host: evil.example','--header','Forwarded: host=evil.example','--header','X-Forwarded-For: 203.0.113.8','--header','X-Real-IP: 203.0.113.9','https://127.0.0.1'+path],capture_output=True,text=True,timeout=15)
+def request(path,host='staging.vif.io',extra=()):
+ r=subprocess.run(['docker','exec',container,'wget','-T','5','-S','-O','-','--no-check-certificate','--header','Host: '+host,'--header','X-Forwarded-Host: evil.example','--header','Forwarded: host=evil.example','--header','X-Forwarded-For: 203.0.113.8','--header','X-Real-IP: 203.0.113.9',*extra,'https://127.0.0.1'+path],capture_output=True,text=True,timeout=15)
  return r.stdout,r.stderr
 for _ in range(30):
  if '204 No Content' in request('/')[1]:break
@@ -45,5 +48,15 @@ for path in ['/unknown','/walking-club-other','/platform-other','/walking-club/.
 for host in ['domains.staging.vif.io','evil.example']:
  assert '421' in request('/walking-club',host)[1],host
 assert 'Disallow: /' in request('/robots.txt')[0]
+for path, location in [('/events?day=test','https://staging.vif.io/walking-club/events?day=test'),('/auth/callback?code=synthetic&state=old','https://staging.vif.io/walking-club/auth/login')]:
+ _,headers=request(path,'brio-staging.makepad.fr')
+ assert 'Location: '+location+'\n' in headers,headers
+ assert ('303' if path.startswith('/auth/callback') else '308') in headers
+for provider in ['stripe','tally']:
+ path='/webhooks/'+provider
+ assert '405' in request(path,'brio-staging.makepad.fr')[1]
+ body,headers=request(path,'brio-staging.makepad.fr',('--post-data','synthetic=payload'))
+ assert body=='community|/walking-club'+path+'|staging.vif.io|staging.vif.io|||',(body,headers)
+assert '405' in request('/admin/events','brio-staging.makepad.fr',('--post-data','synthetic=payload'))[1]
 print('Vif staging routing, exact path boundaries, forwarding-header sanitization, CNAME rejection and noindex checks passed.')
 PY

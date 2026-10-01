@@ -303,3 +303,12 @@ release lock, validates the combined Nginx configuration with existing mounts,
 verifies unchanged shared resources, and refuses to roll back an unrelated
 concurrent update. The caller must bind the operator run to reviewed source and
 its passing CI and retain the source/configuration identifiers in Slack evidence.
+
+For the reviewed Brio migration, add `--legacy-cutover` to both the check and
+apply commands. This replaces only the old Brio application virtual host: public
+GET/HEAD links redirect to the Walking Club base path, obsolete OIDC callbacks
+start fresh login without carrying codes, and signed Stripe/Tally POST bodies
+continue to the corresponding prefixed webhook. Other mutations are rejected.
+MailDev and production routes remain unchanged. The shared release preserves
+this explicitly installed replacement; the scoped installer's rollback restores
+the prior service specification if its own update fails.

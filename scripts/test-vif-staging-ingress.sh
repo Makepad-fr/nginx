@@ -15,11 +15,11 @@ python3 - "$fixture/nginx.conf" <<'PY'
 from pathlib import Path
 import sys
 common=Path('sites/00-common.conf.template').read_text().split('# Brio logs',1)[1]
-route=Path('sites/vif-staging.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081').replace('http://vif-platform-staging-app:8080','http://127.0.0.1:8082')
+route=Path('sites/vif-staging.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081').replace('http://vif-platform-staging-app:8080','http://127.0.0.1:8082').replace('http://10.80.0.2:9000','http://127.0.0.1:8083')
 route+='\n'+Path('sites/brio-vif-redirects.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081')
 assert 'vif-staging.conf.template' not in Path('compose.yml').read_text()
 stubs=''
-for port, name in [(8081,'community'),(8082,'platform')]:
+for port, name in [(8081,'community'),(8082,'platform'),(8083,'objects')]:
  stubs+='server { listen '+str(port)+'; add_header X-Fixture-Method $request_method always; add_header X-Fixture-Stripe $http_stripe_signature always; add_header X-Fixture-Tally $http_tally_signature always; add_header X-Fixture-Cookie $http_cookie always; add_header X-Fixture-Authorization $http_authorization always; location / { return 200 "'+name+'|$request_uri|$http_host|$http_x_forwarded_host|$http_forwarded|$http_x_forwarded_for|$http_x_real_ip"; } }\n'
 Path(sys.argv[1]).write_text('events {}\nhttp {\n# Brio logs'+common+'\n'+route+'\n'+stubs+'\n}\n')
 PY
@@ -47,6 +47,14 @@ for path in ['/unknown','/walking-club-other','/platform-other','/walking-club/.
  assert any(code in request(path)[1] for code in ('404 Not Found','400 Bad Request')),path
 for host in ['domains.staging.vif.io','evil.example']:
  assert '421' in request('/walking-club',host)[1],host
+object_path='/brio-staging-event-photos/brio/'+('a'*64)+'.jpg'
+body,headers=request(object_path,extra=('--header','Authorization: AWS4-HMAC-SHA256 synthetic','--header','Cookie: member=private'))
+assert body=='objects|'+object_path+'|staging.vif.io||||', (body,headers)
+assert 'X-Fixture-Authorization: AWS4-HMAC-SHA256 synthetic' in headers
+assert 'X-Fixture-Cookie:' not in headers and 'noindex, nofollow, noarchive' in headers
+for path in ['/brio-staging-event-photos/', '/brio-staging-event-photos/other/'+('a'*64)+'.jpg', '/brio-staging-event-photos/brio/not-opaque.jpg', '/minio/admin/v3/info']:
+ assert '404' in request(path)[1],path
+assert '403' in request(object_path,extra=('--post-data','forbidden'))[1]
 assert 'Disallow: /' in request('/robots.txt')[0]
 for path, location in [('/events?day=test','https://staging.vif.io/walking-club/events?day=test'),('/auth/callback?code=synthetic&state=old','https://staging.vif.io/walking-club/auth/login')]:
  _,headers=request(path,'brio-staging.makepad.fr')

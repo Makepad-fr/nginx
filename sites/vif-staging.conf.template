@@ -49,6 +49,25 @@ server {
     proxy_set_header X-Real-IP "";
     proxy_set_header Forwarded "";
     proxy_set_header X-Request-ID $request_id;
+    # Preserve the deployment-bound object prefix. SigV4 still authorizes each
+    # request; bucket listing, other prefixes and the MinIO admin API stay closed.
+    location ~ "^/brio-staging-event-photos/brio/[a-f0-9]{64}[.]jpg$" {
+        client_max_body_size 11m;
+        limit_except GET PUT DELETE { deny all; }
+        proxy_pass http://10.80.0.2:9000;
+        proxy_set_header Host staging.vif.io;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Connection "";
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header X-Forwarded-Proto "";
+        proxy_set_header X-Forwarded-Port "";
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header Cookie "";
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+    }
+    location /brio-staging-event-photos/ { return 404; }
     location = / { return 204; }
     location = /robots.txt { return 200 "User-agent: *\nDisallow: /\n"; }
     location = /walking-club/applications {

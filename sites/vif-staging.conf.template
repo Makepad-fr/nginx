@@ -24,6 +24,9 @@ server {
     error_log /dev/stderr crit;
     add_header Strict-Transport-Security "max-age=31536000" always;
     add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    # Staging owns this policy: replace upstream caching directives rather than
+    # appending duplicate or contradictory fields to the response.
+    proxy_hide_header Cache-Control;
     add_header Cache-Control "private, no-store" always;
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;

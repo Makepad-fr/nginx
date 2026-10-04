@@ -20,7 +20,8 @@ route+='\n'+Path('sites/brio-vif-redirects.conf.template').read_text().replace('
 assert 'vif-staging.conf.template' not in Path('compose.yml').read_text()
 stubs=''
 for port, name in [(8081,'community'),(8082,'platform'),(8083,'objects')]:
- stubs+='server { listen '+str(port)+'; add_header X-Fixture-Method $request_method always; add_header X-Fixture-Stripe $http_stripe_signature always; add_header X-Fixture-Tally $http_tally_signature always; add_header X-Fixture-Cookie $http_cookie always; add_header X-Fixture-Authorization $http_authorization always; location / { return 200 "'+name+'|$request_uri|$http_host|$http_x_forwarded_host|$http_forwarded|$http_x_forwarded_for|$http_x_real_ip"; } }\n'
+ cache='private, no-store' if name=='community' else 'public, max-age=3600'
+ stubs+='server { listen '+str(port)+'; add_header Cache-Control "'+cache+'" always; add_header X-Fixture-Method $request_method always; add_header X-Fixture-Stripe $http_stripe_signature always; add_header X-Fixture-Tally $http_tally_signature always; add_header X-Fixture-Cookie $http_cookie always; add_header X-Fixture-Authorization $http_authorization always; location / { return 200 "'+name+'|$request_uri|$http_host|$http_x_forwarded_host|$http_forwarded|$http_x_forwarded_for|$http_x_real_ip"; } }\n'
 Path(sys.argv[1]).write_text('events {}\nhttp {\n# Brio logs'+common+'\n'+route+'\n'+stubs+'\n}\n')
 PY
 container=$(docker create --network none --entrypoint nginx \
@@ -35,6 +36,9 @@ container=sys.argv[1]
 def request(path,host='staging.vif.io',extra=()):
  r=subprocess.run(['docker','exec',container,'wget','-T','5','-S','-O','-','--no-check-certificate','--header','Host: '+host,'--header','X-Forwarded-Host: evil.example','--header','Forwarded: host=evil.example','--header','X-Forwarded-For: 203.0.113.8','--header','X-Real-IP: 203.0.113.9',*extra,'https://127.0.0.1'+path],capture_output=True,text=True,timeout=15)
  return r.stdout,r.stderr
+def assert_staging_cache(headers):
+ values=[line.strip().split(':',1)[1].strip() for line in headers.splitlines() if line.strip().lower().startswith('cache-control:')]
+ assert values==['private, no-store'],values
 for _ in range(30):
  if '204 No Content' in request('/')[1]:break
  time.sleep(.1)
@@ -43,6 +47,7 @@ for path,name in [('/walking-club','community'),('/walking-club/events?day=test'
  body,headers=request(path)
  assert body==name+'|'+path+'|staging.vif.io|staging.vif.io|||',(path,body,headers)
  assert '200 OK' in headers and 'noindex, nofollow, noarchive' in headers
+ assert_staging_cache(headers)
 for path in ['/unknown','/walking-club-other','/platform-other','/walking-club/../../unknown']:
  assert any(code in request(path)[1] for code in ('404 Not Found','400 Bad Request')),path
 for host in ['domains.staging.vif.io','evil.example']:
@@ -52,6 +57,7 @@ body,headers=request(object_path,extra=('--header','Authorization: AWS4-HMAC-SHA
 assert body=='objects|'+object_path+'|staging.vif.io||||', (body,headers)
 assert 'X-Fixture-Authorization: AWS4-HMAC-SHA256 synthetic' in headers
 assert 'X-Fixture-Cookie:' not in headers and 'noindex, nofollow, noarchive' in headers
+assert_staging_cache(headers)
 for path in ['/brio-staging-event-photos/', '/brio-staging-event-photos/other/'+('a'*64)+'.jpg', '/brio-staging-event-photos/brio/not-opaque.jpg', '/minio/admin/v3/info']:
  assert '404' in request(path)[1],path
 assert '403' in request(object_path,extra=('--post-data','forbidden'))[1]

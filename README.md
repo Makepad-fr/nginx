@@ -273,6 +273,15 @@ unknown paths and unapproved hosts fail closed. The CNAME target
 All HTTPS responses carry `noindex`; forwarding headers are overwritten or
 removed, and the existing privacy log format excludes URLs and identities.
 
+The staging HTTPS edge owns the cache policy: it suppresses upstream
+`Cache-Control` fields and emits exactly one `Cache-Control: private, no-store`
+field, including for authenticated downloads and private media. This also
+overrides public cache directives from application assets. Keep the application's
+own private-response headers for direct upstream access; do not remove them to
+resolve duplicate edge headers. The ingress fixture verifies identical and
+conflicting upstream policies. After a route update, confirm the single header
+on a synthetic account export through the actual staging hostname.
+
 The dormant `envs/production/vif-staging.compose.yml` overlay requires
 `MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK=makepad_vif_platform_staging_edge`,
 matching the application platform edge network. Store it in the protected GitHub

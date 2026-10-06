@@ -391,7 +391,7 @@ jobs:
           for network in before['TaskTemplate'].get('Networks', []):
               item = json.loads(subprocess.check_output(['docker', 'network', 'inspect', network['Target']]))[0]
               name = item['Name']
-              if name not in {'makepad_keycloak_visitaki_proxy', 'makepad_visitaki_preview_app', 'makepad_vif_platform_staging_edge'}:
+              if name not in {'makepad_keycloak_visitaki_proxy', 'makepad_visitaki_preview_app', 'makepad_vif_platform_staging_edge', 'makepad_vif_landing_staging_edge'}:
                   continue
               stack.setdefault('networks', {})[name] = {'external': True, 'name': name}
               service.setdefault('networks', {})[name] = {'aliases': network.get('Aliases', [])}

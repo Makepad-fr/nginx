@@ -341,3 +341,17 @@ Do not activate production as part of this staging operation.
 host/path layout without activating it. It is not included by any compose or
 deployment command. Production media requires its own reviewed route and storage
 policy; never copy the staging object bucket into production.
+
+### Preserve the landing during later shared releases
+
+The ordinary shared release reuses the exact existing opt-in Vif route config
+and its dedicated landing network. Both must be retained together: preserving
+only the route leaves nginx unable to resolve the landing upstream. The renderer
+regression in `tests/test_preserve_vif_landing.py` executes the workflow's actual
+render step against a prior service containing that network and checks that the
+config, external network and aliases survive.
+
+Keep the landing service's deployment receipt separate from the edge receipt.
+An edge rollback restores the previous edge specification; it must not roll back
+community data or replace another project's routes. A landing-only rollback uses
+its own service specification and leaves all community runtimes in place.

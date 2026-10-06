@@ -64,6 +64,7 @@ jobs:
           python3 -m unittest ./tests/test_brio_nginx_control_receipt.py
           python3 -m unittest ./tests/test_brio_release_guard.py
           python3 -m unittest ./tests/test_vif_ingress_control.py
+          python3 -m unittest ./tests/test_preserve_vif_landing.py
           python3 -m unittest ./tests/test_visitaki_ingress.py
           ./scripts/test-visitaki-ingress.sh
           ./scripts/test-vif-staging-ingress.sh

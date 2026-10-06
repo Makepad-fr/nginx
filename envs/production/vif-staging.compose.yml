@@ -10,7 +10,11 @@ services:
     networks:
       - brio_staging_app
       - vif_platform_staging_app
+      - vif_landing_staging_app
 networks:
   vif_platform_staging_app:
     external: true
     name: ${MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK:?set isolated platform edge network}
+  vif_landing_staging_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VIF_LANDING_STAGING_APP_NETWORK:?set isolated landing edge network}

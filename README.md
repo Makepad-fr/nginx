@@ -321,3 +321,18 @@ continue to the corresponding prefixed webhook. Other mutations are rejected.
 MailDev and production routes remain unchanged. The shared release preserves
 this explicitly installed replacement; the scoped installer's rollback restores
 the prior service specification if its own update fails.
+
+## Vif public landing and community routes
+
+The explicit staging overlay sends `/` and `/assets/vif/` to the independent
+Go landing process `vif-landing-app:8080`. It removes browser cookies and
+Authorization before forwarding. `/walking-club` and `/platform` retain their
+existing exact-boundary upstreams and full paths; no landing-service redirect
+selects a community. Unknown paths fail closed. All staging remains noindex.
+
+First provision the inventoried landing edge with
+`scripts/provision-vif-landing-edge.sh`, deploy the reviewed landing image from
+Makepad-fr/brio, then use the existing locked `deploy-brio-ingress.py
+--vif-staging --check` and deployment procedure. The public landing has no
+community/database network. Capture the previous edge specification for rollback.
+Do not activate production as part of this staging operation.

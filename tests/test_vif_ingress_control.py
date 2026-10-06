@@ -9,17 +9,17 @@ m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 
 class VifIngressTests(unittest.TestCase):
     def test_vif_selection_never_replaces_legacy_or_production_routes(self):
-        names, networks = m.selection(True, {'MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK':'makepad_vif_platform_staging_edge'})
+        names, networks = m.selection(True, {'MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK':'makepad_vif_platform_staging_edge','MAKEPAD_PROXY_VIF_LANDING_STAGING_APP_NETWORK':'makepad_vif_landing_staging_edge'})
         self.assertEqual(names, ('vif-staging.conf.template',))
-        self.assertEqual(networks, ['makepad_brio_staging_app','makepad_vif_platform_staging_edge'])
+        self.assertEqual(networks, ['makepad_brio_staging_app','makepad_vif_platform_staging_edge','makepad_vif_landing_staging_edge'])
         with self.assertRaises(RuntimeError): m.selection(True, {})
         with self.assertRaises(RuntimeError): m.selection(True, {'MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK':'makepad_vif_prod_app'})
     def test_legacy_cutover_requires_explicit_vif_and_only_replaces_old_app(self):
         with self.assertRaises(RuntimeError): m.selection(False, {}, True)
-        names, networks = m.selection(True, {'MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK':'makepad_vif_platform_staging_edge'}, True)
+        names, networks = m.selection(True, {'MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK':'makepad_vif_platform_staging_edge','MAKEPAD_PROXY_VIF_LANDING_STAGING_APP_NETWORK':'makepad_vif_landing_staging_edge'}, True)
         self.assertEqual(names, ('vif-staging.conf.template', 'brio-staging.conf.template'))
         self.assertNotIn('maildev-brio-staging.conf.template', names)
-        self.assertEqual(len(networks), 2)
+        self.assertEqual(len(networks), 3)
     def test_existing_brio_selection_is_unchanged(self):
         names, networks = m.selection(False, {})
         self.assertEqual(names, ('brio-staging.conf.template','maildev-brio-staging.conf.template'))

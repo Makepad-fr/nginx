@@ -336,3 +336,8 @@ Makepad-fr/brio, then use the existing locked `deploy-brio-ingress.py
 --vif-staging --check` and deployment procedure. The public landing has no
 community/database network. Capture the previous edge specification for rollback.
 Do not activate production as part of this staging operation.
+
+`docs/vif-production-routing.conf.example` prepares the equivalent production
+host/path layout without activating it. It is not included by any compose or
+deployment command. Production media requires its own reviewed route and storage
+policy; never copy the staging object bucket into production.

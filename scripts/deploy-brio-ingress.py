@@ -27,7 +27,9 @@ def selection(vif_staging, settings, legacy_cutover=False):
     if vif_staging:
         if settings.get('MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK') != 'makepad_vif_platform_staging_edge':
             raise RuntimeError('Vif staging requires its dedicated inventoried edge network')
-        return (('vif-staging.conf.template','brio-staging.conf.template') if legacy_cutover else ('vif-staging.conf.template',)), ['makepad_brio_staging_app', 'makepad_vif_platform_staging_edge']
+        if settings.get('MAKEPAD_PROXY_VIF_LANDING_STAGING_APP_NETWORK') != 'makepad_vif_landing_staging_edge':
+            raise RuntimeError('Vif landing requires its dedicated inventoried edge network')
+        return (('vif-staging.conf.template','brio-staging.conf.template') if legacy_cutover else ('vif-staging.conf.template',)), ['makepad_brio_staging_app', 'makepad_vif_platform_staging_edge', 'makepad_vif_landing_staging_edge']
     return ('brio-staging.conf.template', 'maildev-brio-staging.conf.template'), ['makepad_brio_staging_app', 'makepad_brio_staging_maildev_web']
 
 

@@ -15,11 +15,11 @@ python3 - "$fixture/nginx.conf" <<'PY'
 from pathlib import Path
 import sys
 common=Path('sites/00-common.conf.template').read_text().split('# Brio logs',1)[1]
-route=Path('sites/vif-staging.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081').replace('http://vif-platform-staging-app:8080','http://127.0.0.1:8082').replace('http://10.80.0.2:9000','http://127.0.0.1:8083')
+route=Path('sites/vif-staging.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081').replace('http://vif-platform-staging-app:8080','http://127.0.0.1:8082').replace('http://vif-landing-app:8080','http://127.0.0.1:8084').replace('http://10.80.0.2:9000','http://127.0.0.1:8083')
 route+='\n'+Path('sites/brio-vif-redirects.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081')
 assert 'vif-staging.conf.template' not in Path('compose.yml').read_text()
 stubs=''
-for port, name in [(8081,'community'),(8082,'platform'),(8083,'objects')]:
+for port, name in [(8081,'community'),(8082,'platform'),(8083,'objects'),(8084,'landing')]:
  cache='private, no-store' if name=='community' else 'public, max-age=3600'
  stubs+='server { listen '+str(port)+'; add_header Cache-Control "'+cache+'" always; add_header X-Fixture-Method $request_method always; add_header X-Fixture-Stripe $http_stripe_signature always; add_header X-Fixture-Tally $http_tally_signature always; add_header X-Fixture-Cookie $http_cookie always; add_header X-Fixture-Authorization $http_authorization always; location / { return 200 "'+name+'|$request_uri|$http_host|$http_x_forwarded_host|$http_forwarded|$http_x_forwarded_for|$http_x_real_ip"; } }\n'
 Path(sys.argv[1]).write_text('events {}\nhttp {\n# Brio logs'+common+'\n'+route+'\n'+stubs+'\n}\n')
@@ -40,7 +40,7 @@ def assert_staging_cache(headers):
  values=[line.strip().split(':',1)[1].strip() for line in headers.splitlines() if line.strip().lower().startswith('cache-control:')]
  assert values==['private, no-store'],values
 for _ in range(30):
- if '204 No Content' in request('/')[1]:break
+ if '200 OK' in request('/')[1]:break
  time.sleep(.1)
 else:raise AssertionError('Fixture did not become ready')
 for path,name in [('/walking-club','community'),('/walking-club/events?day=test','community'),('/walking-club/admin/photo-library','community'),('/platform','platform'),('/platform/account','platform')]:
@@ -52,6 +52,12 @@ for path in ['/unknown','/walking-club-other','/platform-other','/walking-club/.
  assert any(code in request(path)[1] for code in ('404 Not Found','400 Bad Request')),path
 for host in ['domains.staging.vif.io','evil.example']:
  assert '421' in request('/walking-club',host)[1],host
+for path in ['/', '/assets/vif/landing.css']:
+ body,headers=request(path,extra=('--header','Cookie: member=private','--header','Authorization: Bearer private'))
+ assert body=='landing|'+path+'|staging.vif.io|staging.vif.io|||',(body,headers)
+ assert 'X-Fixture-Cookie:' not in headers and 'X-Fixture-Authorization:' not in headers
+ assert 'Location:' not in headers and 'noindex' in headers
+ assert_staging_cache(headers)
 object_path='/brio-staging-event-photos/brio/'+('a'*64)+'.jpg'
 body,headers=request(object_path,extra=('--header','Authorization: AWS4-HMAC-SHA256 synthetic','--header','Cookie: member=private'))
 assert body=='objects|'+object_path+'|staging.vif.io||||', (body,headers)

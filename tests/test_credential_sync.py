@@ -41,7 +41,7 @@ class CredentialSyncTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(INVENTORY.read_text())
         self.assertEqual(payload["environment"]["name"], "production")
-        self.assertEqual(len(payload["entries"]), 19)
+        self.assertEqual(len(payload["entries"]), 20)
         serialized = json.dumps(payload)
         for forbidden in (
             "release-nginx",
@@ -105,6 +105,7 @@ class CredentialSyncTests(unittest.TestCase):
                 values[entry["destination"]] = "network_" + entry["field"]
         values["MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK"] = "makepad_brio_staging_app"
         values["MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK"] = "makepad_brio_staging_maildev_web"
+        values["MAKEPAD_PROXY_VIF_LANDING_STAGING_APP_NETWORK"] = "makepad_vif_landing_staging_edge"
         values["MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK"] = "makepad_vif_platform_staging_edge"
         return values
 
@@ -135,7 +136,7 @@ class CredentialSyncTests(unittest.TestCase):
                 if args == ["test"]:
                     raise SystemExit(0)
                 if args[:2] == ["item", "list"]:
-                    print(json.dumps({"items": [{"title": "Nginx · production deployment"}, {"title": "Nginx · production overlay names"}, {"title": "Vif Platform Staging - Runtime"}]}))
+                    print(json.dumps({"items": [{"title": "Nginx · production deployment"}, {"title": "Nginx · production overlay names"}, {"title": "Vif Platform Staging - Runtime"}, {"title": "Vif Staging - Landing Runtime"}]}))
                     raise SystemExit(0)
                 if args[:2] == ["item", "view"]:
                     if os.environ.get("MOCK_ALLOW_ITEM_VIEW") != "1":
@@ -268,7 +269,7 @@ class CredentialSyncTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         log = pathlib.Path(environment["MOCK_LOG"]).read_text()
-        self.assertEqual(log.count("gh secret set "), 14)
+        self.assertEqual(log.count("gh secret set "), 15)
         self.assertEqual(log.count("gh variable set "), 5)
         self.assertIn("SYNC_COMPLETE", result.stdout)
         non_distinct_public_values = {"22", "makepad"}

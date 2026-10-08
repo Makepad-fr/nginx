@@ -418,3 +418,11 @@ smoke-test all affected public routes. Do not use the broad stack deployment
 for an image-only release. Swarm owns health-failure rollback; if the helper
 fails, inspect its update/rollback state and restore service before another
 release. Never issue a second blind rollback after automatic recovery.
+
+Vif production activation uses `envs/production/vif-production.compose.yml` after
+reviewed app, platform and landing readiness. It replaces only the existing Vif
+production config with path routing to three dedicated overlays. Unknown paths
+return 404; client-supplied forwarding headers are overwritten, and root landing
+requests strip cookies and Authorization. Production has no blanket `noindex`.
+Keep staging and all unrelated live service specifications unchanged during the
+configuration-preserving rollout; capture the prior config and networks for rollback.

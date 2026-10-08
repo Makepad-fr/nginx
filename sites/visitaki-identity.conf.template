@@ -1,0 +1,34 @@
+# Dedicated Visitaki identity on the application host. Administration stays private.
+server {
+    listen 80;
+    server_name auth.visitaki.com;
+    access_log off;
+    error_log /dev/stderr crit;
+    location /.well-known/acme-challenge/ { root /var/lib/letsencrypt; }
+    location / { return 308 https://auth.visitaki.com$request_uri; }
+}
+server {
+    listen 443 ssl;
+    server_name auth.visitaki.com;
+    ssl_certificate /etc/letsencrypt/live/auth.visitaki.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/auth.visitaki.com/privkey.pem;
+    access_log off;
+    error_log /dev/stderr crit;
+    client_max_body_size 64k;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    resolver 127.0.0.11 ipv6=off valid=30s;
+    location ~ ^/(realms/visitaki/|resources/) {
+        set $visitaki_identity http://keycloak-visitaki:8080;
+        proxy_pass $visitaki_identity;
+        proxy_set_header Host auth.visitaki.com;
+        proxy_set_header X-Forwarded-Host auth.visitaki.com;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port 443;
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 30s;
+    }
+    location / { return 404; }
+}

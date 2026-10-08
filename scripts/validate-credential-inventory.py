@@ -12,6 +12,8 @@ from typing import Any, NoReturn
 
 
 EXPECTED_ENTRIES = {
+    ("secret", "MAKEPAD_PROXY_VIF_LANDING_STAGING_APP_NETWORK", "Vif Staging - Landing Runtime", "VIF_LANDING_EDGE_NETWORK"),
+    ("secret", "MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK", "Vif Platform Staging - Runtime", "VIF_PLATFORM_EDGE_NETWORK"),
     ("secret", "DEPLOY_SSH_PRIVATE_KEY", "Nginx · production deployment", "private_key"),
     ("secret", "DEPLOY_SSH_KNOWN_HOSTS", "Nginx · production deployment", "known_hosts"),
     ("secret", "MAKEPAD_PROXY_PROD_APP_NETWORK", "Nginx · production overlay names", "prod"),

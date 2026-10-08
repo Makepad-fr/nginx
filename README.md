@@ -206,6 +206,14 @@ For the additive Pluck activation, run `python3 scripts/deploy-pluck-ingress.py`
 ## Posey landing page
 
 `posey.makepad.fr` routes to `posey-prod_web:8080` on encrypted attachable overlay `makepad_posey_prod_app`. Use the additive `scripts/deploy-posey-ingress.py` helper to preserve unrelated routes. `--bootstrap` installs HTTP ACME only; `--check` validates a candidate without modifying the proxy. Issue TLS into `/etc/letsencrypt/live/posey.makepad.fr/` using the existing webroot and account, then apply the HTTPS template. Existing certificate renewal reloads the proxy. Do not deploy the entire shared proxy stack for this change.
+## CartHop additive ingress
+
+CartHop uses the encrypted `makepad_carthop_prod_app` overlay (`MAKEPAD_PROXY_CARTHOP_APP_NETWORK`, matching the app's `DEPLOY_APP_NETWORK`) and `carthop.makepad.fr`. The optional `compose.carthop.yml` overlay adds only its network/config to the base compose files. This overlay introduces no credential or workflow secret.
+
+For the live shared ingress, `scripts/deploy-carthop-ingress.py --check` validates a candidate with every current route. `--bootstrap` installs only HTTP ACME routing; after certificate issuance, run without that flag to install HTTPS. The script verifies reused config contents, checks service-version drift, preserves all unrelated config IDs and networks, and relies on existing Swarm rollback. It never replaces the complete shared stack. Access logging is disabled on this route to avoid retaining query locations or account details. CartHop owns its backend, TLS issuance/renewal operation, and service acceptance checks.
+
+Run `python3 scripts/test-carthop-ingress.py` before a CartHop ingress change. CI runs this suite together with the config-content checks. These non-mutating tests reject stale config IDs, missing networks and rolled-back updates. The deploy helper additionally runs `nginx -t` with all live routes before updating anything, and checks unrelated configs, mounts, environment, image and networks afterward.
+
 ### Brio private event photos
 
 Brio's authenticated event create/edit routes allow 11 MB request bodies for a

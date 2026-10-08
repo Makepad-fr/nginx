@@ -34,6 +34,9 @@ server {
         set $vif_prod_upstream ${VIF_PROD_UPSTREAM};
         proxy_pass $vif_prod_upstream;
         proxy_http_version 1.1;
+        proxy_buffer_size 32k;
+        proxy_buffers 8 32k;
+        proxy_busy_buffers_size 64k;
         proxy_read_timeout 300s;
         proxy_send_timeout 300s;
         proxy_set_header Connection $connection_upgrade;

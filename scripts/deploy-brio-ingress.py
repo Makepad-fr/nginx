@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Add Brio staging routes to the existing shared ingress without replacing other projects."""
+from brio_release_guard import deployment_guard
 import argparse
 import base64
 import fcntl
@@ -13,7 +14,6 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVICE = 'makepad-edge_nginx'
-TARGETS = {'02-brio-common.conf.template', 'brio-staging.conf.template', 'maildev-brio-staging.conf.template'}
 
 def run(*args, **kwargs):
     return subprocess.check_output(args, **kwargs).decode()
@@ -21,12 +21,34 @@ def run(*args, **kwargs):
 def inspect():
     return json.loads(run('docker', 'service', 'inspect', SERVICE))[0]
 
+def selection(vif_staging, settings, legacy_cutover=False):
+    if legacy_cutover and not vif_staging:
+        raise RuntimeError("Legacy cutover requires the explicit Vif staging target")
+    if vif_staging:
+        if settings.get('MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK') != 'makepad_vif_platform_staging_edge':
+            raise RuntimeError('Vif staging requires its dedicated inventoried edge network')
+        if settings.get('MAKEPAD_PROXY_VIF_LANDING_STAGING_APP_NETWORK') != 'makepad_vif_landing_staging_edge':
+            raise RuntimeError('Vif landing requires its dedicated inventoried edge network')
+        return (('vif-staging.conf.template','brio-staging.conf.template') if legacy_cutover else ('vif-staging.conf.template',)), ['makepad_brio_staging_app', 'makepad_vif_platform_staging_edge', 'makepad_vif_landing_staging_edge']
+    return ('brio-staging.conf.template', 'maildev-brio-staging.conf.template'), ['makepad_brio_staging_app', 'makepad_brio_staging_maildev_web']
+
+
+def rollback_owned(before, current):
+    if current['Spec'] == before['Spec']:
+        return False
+    if current.get('PreviousSpec') != before['Spec']:
+        raise RuntimeError('Ingress history changed; refusing to revert an unrelated deployment')
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--vif-staging", action="store_true")
+    parser.add_argument("--legacy-cutover", action="store_true")
     args = parser.parse_args()
     os.umask(0o077)
-    with open('/tmp/makepad-brio-ingress.lock', 'a') as lock:
+    with deployment_guard(), open('/tmp/makepad-brio-ingress.lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         before = inspect()
         spec = before['Spec']['TaskTemplate']['ContainerSpec']
@@ -35,19 +57,21 @@ def main():
             raise RuntimeError('Expected one local shared ingress container')
         current = containers[0]
         settings = dict(line.split('=', 1) for line in (ROOT/'envs/production/.env.proxy').read_text().splitlines() if line and not line.startswith('#') and '=' in line)
+        names, networks = selection(args.vif_staging, settings, args.legacy_cutover)
+        targets = set(names) | {'02-brio-common.conf.template'}
         rendered = {}
-        for name in ('brio-staging.conf.template', 'maildev-brio-staging.conf.template'):
-            rendered[name] = re.sub(r'\$\{([A-Z][A-Z0-9_]*)\}', lambda m: settings[m[1]], (ROOT/'sites'/name).read_text())
+        for name in names:
+            source_name = 'brio-vif-redirects.conf.template' if args.legacy_cutover and name == 'brio-staging.conf.template' else name
+            rendered[name] = re.sub(r'\$\{([A-Z][A-Z0-9_]*)\}', lambda m: settings[m[1]], (ROOT/'sites'/source_name).read_text())
         common = (ROOT/'sites/00-common.conf.template').read_text()
         rendered['02-brio-common.conf.template'] = common[common.index('# Brio logs'):]
         previous_configs = spec.get('Configs', [])
         for config in previous_configs:
-            if Path(config['File']['Name']).name in TARGETS:
+            if Path(config['File']['Name']).name in targets:
                 continue
             content = json.loads(run('docker', 'config', 'inspect', config['ConfigID']))[0]['Spec']['Data']
             if 'log_format brio_privacy' in base64.b64decode(content).decode():
                 rendered.pop('02-brio-common.conf.template', None)
-        networks = ['makepad_brio_staging_app', 'makepad_brio_staging_maildev_web']
         previous_networks = {n['Target'] for n in before['Spec']['TaskTemplate']['Networks']}
         additions = []
         for network in networks:
@@ -77,11 +101,11 @@ def main():
                             '--health-timeout', '5s', '--health-retries', '3',
                             '--health-start-period', '10s'])
             for config in previous_configs:
-                if Path(config['File']['Name']).name in TARGETS:
+                if Path(config['File']['Name']).name in targets:
                     changes.extend(['--config-rm', config['ConfigName']])
             for name, content in rendered.items():
                 digest = hashlib.sha256(content.encode()).hexdigest()[:16]
-                config_name = 'brio_'+name.replace('.', '_')+'_'+digest
+                config_name = ('vif_staging_' if args.vif_staging and (name.startswith('vif-') or args.legacy_cutover and name == 'brio-staging.conf.template') else 'brio_')+name.replace('.', '_')+'_'+digest
                 exists = subprocess.run(['docker', 'config', 'inspect', config_name], capture_output=True)
                 if exists.returncode:
                     run('docker', 'config', 'create', '--label', 'com.makepad.owner=Makepad-fr/nginx', config_name, '-', input=content.encode())
@@ -93,7 +117,7 @@ def main():
                     output = (error.output or b'').decode(errors='replace')
                     raise RuntimeError('Shared ingress update failed: '+output[-4000:]) from error
                 after = inspect()
-                preserved = {c['ConfigID'] for c in previous_configs if Path(c['File']['Name']).name not in TARGETS}
+                preserved = {c['ConfigID'] for c in previous_configs if Path(c['File']['Name']).name not in targets}
                 actual = {c['ConfigID'] for c in after['Spec']['TaskTemplate']['ContainerSpec']['Configs']}
                 if not preserved <= actual or not previous_networks <= {n['Target'] for n in after['Spec']['TaskTemplate']['Networks']}:
                     raise RuntimeError('Shared ingress resources were not preserved')
@@ -117,8 +141,10 @@ def main():
             except BaseException:
                 # CLI validation can fail before changing the service. Rolling
                 # back in that case would revert an unrelated prior deployment.
-                if inspect()['Version']['Index'] != before['Version']['Index']:
+                if rollback_owned(before, inspect()):
                     run('docker', 'service', 'rollback', '--detach=false', SERVICE, stderr=subprocess.STDOUT)
+                    if inspect()['Spec'] != before['Spec']:
+                        raise RuntimeError('Ingress rollback did not restore the exact previous configuration')
                 raise
 
 if __name__ == '__main__':

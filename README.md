@@ -203,6 +203,11 @@ Pluck uses `pluck.makepad.fr` (A: `135.181.141.31`) and `sites/pluck.conf.templa
 
 For the additive Pluck activation, run `python3 scripts/deploy-pluck-ingress.py` on the app VM from this checked-out repository after certificate issuance. It saves a protected pre-update snapshot, validates the full candidate Nginx configuration using the current image and network, detects concurrent service changes, preserves existing configuration IDs and networks, and rolls back a failed update. A second activation fails closed rather than adding duplicate routes.
 
+## CartHop additive ingress
+
+CartHop uses the encrypted `makepad_carthop_prod_app` overlay (`MAKEPAD_PROXY_CARTHOP_APP_NETWORK`, matching the app's `DEPLOY_APP_NETWORK`) and `carthop.makepad.fr`. The optional `compose.carthop.yml` overlay adds only its network/config to the base compose files. This overlay introduces no credential or workflow secret.
+
+For the live shared ingress, `scripts/deploy-carthop-ingress.py --check` validates a candidate with every current route. `--bootstrap` installs only HTTP ACME routing; after certificate issuance, run without that flag to install HTTPS. The script verifies reused config contents, checks service-version drift, preserves all unrelated config IDs and networks, and relies on existing Swarm rollback. It never replaces the complete shared stack. Access logging is disabled on this route to avoid retaining query locations or account details. CartHop owns its backend, TLS issuance/renewal operation, and service acceptance checks.
 ### Brio private event photos
 
 Brio's authenticated event create/edit routes allow 11 MB request bodies for a

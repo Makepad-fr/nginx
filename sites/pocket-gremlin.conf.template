@@ -2,6 +2,7 @@ server {
     listen 80;
     listen [::]:80;
     server_name pocketgremlin.makepad.fr;
+    access_log off;
 
     location /.well-known/acme-challenge/ {
         root /var/lib/letsencrypt;
@@ -18,6 +19,7 @@ server {
     listen [::]:443 ssl;
     http2 on;
     server_name pocketgremlin.makepad.fr;
+    access_log off;
     resolver 127.0.0.11 valid=10s ipv6=off;
 
     ssl_certificate /etc/letsencrypt/live/pocketgremlin.makepad.fr/fullchain.pem;
@@ -26,6 +28,8 @@ server {
     ssl_session_timeout 1d;
     ssl_session_tickets off;
     add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
 
     location / {
         set $pocket_gremlin_upstream http://makepad-landing-prod-app:8080;

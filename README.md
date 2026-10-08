@@ -375,3 +375,9 @@ Keep the landing service's deployment receipt separate from the edge receipt.
 An edge rollback restores the previous edge specification; it must not roll back
 community data or replace another project's routes. A landing-only rollback uses
 its own service specification and leaves all community runtimes in place.
+
+## Pocket Gremlin scoped ingress
+
+`pocketgremlin.makepad.fr` serves the existing Makepad landing application's `/pocket-gremlin/` pages through its already-attached `makepad_landing_prod_app` overlay. The route preserves relative assets and exposes landing, privacy, and support pages. Use `python3 scripts/deploy-pocket-gremlin-ingress.py --check` on the app host for full live syntax/TLS-file validation, then run without `--check` to activate the exact reviewed checkout. The dedicated certificate must already exist. The helper preserves every unrelated service field and route, verifies stored configuration contents, checks completed convergence, and relies on Swarm's existing automatic rollback. It does not change the shared landing network or require a root shell.
+
+CI exercises actual Nginx forwarding, route failures, and configuration integrity. Verify live TLS, all three pages, CSS and neighboring services after activation.

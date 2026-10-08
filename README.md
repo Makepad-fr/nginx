@@ -203,6 +203,11 @@ Pluck uses `pluck.makepad.fr` (A: `135.181.141.31`) and `sites/pluck.conf.templa
 
 For the additive Pluck activation, run `python3 scripts/deploy-pluck-ingress.py` on the app VM from this checked-out repository after certificate issuance. It saves a protected pre-update snapshot, validates the full candidate Nginx configuration using the current image and network, detects concurrent service changes, preserves existing configuration IDs and networks, and rolls back a failed update. A second activation fails closed rather than adding duplicate routes.
 
+## Posey landing page and existing community routes
+
+The template preserves the already-live `/api/community/` API and exact Apple association route. Real-Nginx CI tests cover route boundaries, backend rejection forwarding, and scoped upload limits.
+
+`posey.makepad.fr` routes to `posey-prod_web:8080` on encrypted attachable overlay `makepad_posey_prod_app`. Use the additive `scripts/deploy-posey-ingress.py` helper to preserve unrelated routes. `--bootstrap` installs HTTP ACME only; `--check` validates a candidate without modifying the proxy. Issue TLS into `/etc/letsencrypt/live/posey.makepad.fr/` using the existing webroot and account, then apply the HTTPS template. Existing certificate renewal reloads the proxy. Do not deploy the entire shared proxy stack for this change.
 ## CartHop additive ingress
 
 CartHop uses the encrypted `makepad_carthop_prod_app` overlay (`MAKEPAD_PROXY_CARTHOP_APP_NETWORK`, matching the app's `DEPLOY_APP_NETWORK`) and `carthop.makepad.fr`. The optional `compose.carthop.yml` overlay adds only its network/config to the base compose files. This overlay introduces no credential or workflow secret.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add Pocket Gremlin routes to the existing shared ingress without replacing other projects."""
+"""Add Airloom routes to the existing shared ingress without replacing other projects."""
 import argparse
 import base64
 import fcntl
@@ -8,13 +8,12 @@ import json
 import os
 from pathlib import Path
 import re
-import socket
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVICE = 'makepad-edge_nginx'
-TARGETS = {'pocket-gremlin.conf.template'}
+TARGETS = {'airloom-prod.conf.template'}
 
 def run(*args, **kwargs):
     return subprocess.check_output(args, **kwargs).decode()
@@ -27,10 +26,10 @@ def verify_applied(after, expected_configs, required_networks):
         raise RuntimeError('Ingress update did not complete; inspect Swarm rollback/update state')
     actual = {c['File']['Name']: c['ConfigID'] for c in after['Spec']['TaskTemplate']['ContainerSpec'].get('Configs', [])}
     if any(actual.get(target) != config_id for target, config_id in expected_configs.items()):
-        raise RuntimeError('Expected Pocket Gremlin route was not installed')
+        raise RuntimeError('Expected Airloom route was not installed')
     attached = {n['Target'] for n in after['Spec']['TaskTemplate'].get('Networks', [])}
     if not required_networks <= attached:
-        raise RuntimeError('Expected Pocket Gremlin network was not attached')
+        raise RuntimeError('Expected Airloom network was not attached')
 
 def verified_config(config_name, content):
     existing = subprocess.run(['docker', 'config', 'inspect', config_name], capture_output=True)
@@ -41,17 +40,16 @@ def verified_config(config_name, content):
         raw = existing.stdout
     config = json.loads(raw)[0]
     if base64.b64decode(config['Spec']['Data'], validate=True) != content.encode():
-        raise RuntimeError('Existing Pocket Gremlin config content differs from the validated route')
+        raise RuntimeError('Existing Airloom config content differs from the validated route')
     return config['ID']
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--bootstrap", action="store_true", help="Serve only HTTP ACME while provisioning TLS")
     args = parser.parse_args()
-    if socket.gethostbyname('pocketgremlin.makepad.fr') != '135.181.141.31':
-        raise RuntimeError('Pocket Gremlin DNS does not point to the app proxy')
     os.umask(0o077)
-    with open('/tmp/makepad-pocket-gremlin-ingress.lock', 'a') as lock:
+    with open('/tmp/makepad-airloom-ingress.lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         before = inspect()
         spec = before['Spec']['TaskTemplate']['ContainerSpec']
@@ -61,21 +59,21 @@ def main():
         if len(containers) != 1:
             raise RuntimeError('Expected one local shared ingress container')
         current = containers[0]
-        source = 'pocket-gremlin.conf.template'
-        rendered = {'pocket-gremlin.conf.template': (ROOT/'sites'/source).read_text()}
+        source = 'airloom-acme.conf' if args.bootstrap else 'airloom-prod.conf.template'
+        rendered = {'airloom-prod.conf.template': (ROOT/'sites'/source).read_text()}
         previous_configs = spec.get('Configs', [])
-        networks = ['makepad_landing_prod_app']
+        networks = ['makepad_airloom_prod_app']
         previous_networks = {n['Target'] for n in before['Spec']['TaskTemplate']['Networks']}
         additions = []
         required_networks = set()
         for network in networks:
             value = json.loads(run('docker', 'network', 'inspect', network))[0]
-            if value['Driver'] != 'overlay' or not value['Attachable']:
-                raise RuntimeError('Pocket Gremlin requires the existing attachable landing overlay')
+            if value['Driver'] != 'overlay' or not value['Attachable'] or value['Options'].get('encrypted') != 'true':
+                raise RuntimeError('Airloom requires its encrypted attachable overlays')
             required_networks.add(value['Id'])
             if value['Id'] not in previous_networks:
-                raise RuntimeError('Proxy must already be attached to the shared landing overlay')
-        with tempfile.TemporaryDirectory(prefix='pocket-gremlin-ingress-') as directory:
+                additions.extend(['--network-add', network])
+        with tempfile.TemporaryDirectory(prefix='airloom-ingress-') as directory:
             candidate = Path(directory)/'conf'
             candidate.mkdir()
             run('docker', 'cp', current+':/etc/nginx/conf.d/.', str(candidate))
@@ -96,7 +94,7 @@ def main():
             expected_configs = {}
             for name, content in rendered.items():
                 digest = hashlib.sha256(content.encode()).hexdigest()[:16]
-                config_name = 'pocket-gremlin_'+name.replace('.', '_')+'_'+digest
+                config_name = 'airloom_'+name.replace('.', '_')+'_'+digest
                 expected_configs['/etc/nginx/templates/'+name] = verified_config(config_name, content)
                 changes.extend(['--config-add', 'source='+config_name+',target=/etc/nginx/templates/'+name+',mode=0444'])
             try:
@@ -127,7 +125,7 @@ def main():
                 if health != 'healthy':
                     raise RuntimeError('Shared ingress health check did not converge')
                 run('docker', 'exec', active[0], 'nginx', '-t', stderr=subprocess.STDOUT)
-                print('Pocket Gremlin ingress deployed; existing routes, image, mounts, environment and networks preserved.')
+                print('Airloom ingress deployed; existing routes, image, mounts, environment and networks preserved.')
             except BaseException:
                 # Swarm owns health-failure rollback. Do not issue a second rollback:
                 # this could undo automatic recovery or an unrelated concurrent update.

@@ -43,6 +43,9 @@ services:
           memory: ${MAKEPAD_PROXY_MEMORY_RESERVATION:-64M}
 
 networks:
+  airloom_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_AIRLOOM_APP_NETWORK:-makepad_airloom_prod_app}
   prod_app:
     external: true
     name: ${MAKEPAD_PROXY_PROD_APP_NETWORK}

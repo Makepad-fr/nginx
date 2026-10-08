@@ -59,12 +59,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m unittest discover -s tests -p test_pocket_gremlin_ingress.py
+          python3 ./scripts/test-pocket-gremlin-config.py
+          python3 ./scripts/test-pocket-gremlin-routing.py
+          python3 ./scripts/test-posey-config.py
+          python3 ./scripts/test-posey-ingress.py
+          python3 ./scripts/test-posey-routing.py
+          python3 ./scripts/test-carthop-config.py
+          python3 ./scripts/test-carthop-ingress.py
+          python3 ./scripts/test-airloom-ingress.py
+          python3 ./scripts/test-airloom-config.py
           python3 ./scripts/validate-credential-inventory.py ./deploy/credential-inventory.json
           python3 -m unittest ./tests/test_credential_sync.py
           python3 -m unittest ./tests/test_brio_nginx_control_receipt.py
           python3 -m unittest ./tests/test_brio_release_guard.py
+          python3 -m unittest ./tests/test_vif_ingress_control.py
+          python3 -m unittest ./tests/test_preserve_vif_landing.py
           python3 -m unittest ./tests/test_visitaki_ingress.py
           ./scripts/test-visitaki-ingress.sh
+          ./scripts/test-vif-staging-ingress.sh
           ./scripts/test-runtrace-upload-policy.sh
           ./scripts/test-brio-staging-policy.sh
           python3 ./scripts/test-brio-event-photos.py

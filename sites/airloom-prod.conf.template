@@ -1,0 +1,30 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name airloom.makepad.fr;
+    location /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+    }
+    location / { return 301 https://$host$request_uri; }
+}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name airloom.makepad.fr;
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    ssl_certificate /etc/letsencrypt/live/airloom.makepad.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/airloom.makepad.fr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    location / {
+        set $airloom_upstream http://airloom-prod-web:8080;
+        proxy_pass $airloom_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}

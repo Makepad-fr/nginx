@@ -59,6 +59,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m unittest discover -s tests -p test_pocket_gremlin_ingress.py
+          python3 ./scripts/test-pocket-gremlin-config.py
+          python3 ./scripts/test-pocket-gremlin-routing.py
           python3 ./scripts/test-posey-config.py
           python3 ./scripts/test-posey-ingress.py
           python3 ./scripts/test-posey-routing.py

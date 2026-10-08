@@ -402,3 +402,19 @@ Run `python3 scripts/test-betacrew-ingress.py` and
 `python3 scripts/test-betacrew-routing.py` before release. CI exercises configuration
 and convergence failures, safe reload behavior, real proxy routing and redirects,
 security headers, and the accepted/rejected upload boundary.
+
+### Shared proxy image-only releases
+
+For a reviewed image digest change, use `scripts/upgrade-shared-image.py` on
+its existing application host with that exact revision's `compose.yml`.
+Supply `--expected-image` with the independently verified current digest and
+first run `--check`. The helper validates every live rendered route with the
+candidate image and existing mounts/networks, then updates only the image
+through Docker's version-checked service API. It preserves the full live
+service configuration, including routes installed by scoped releases.
+
+After the check succeeds, run without `--check`, verify the receipt and
+smoke-test all affected public routes. Do not use the broad stack deployment
+for an image-only release. Swarm owns health-failure rollback; if the helper
+fails, inspect its update/rollback state and restore service before another
+release. Never issue a second blind rollback after automatic recovery.

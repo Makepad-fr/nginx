@@ -59,6 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -m unittest discover -s tests -p test_shared_image_upgrade.py
           python3 -m unittest discover -s tests -p test_pocket_gremlin_ingress.py
           python3 ./scripts/test-betacrew-ingress.py
           python3 ./scripts/test-betacrew-routing.py

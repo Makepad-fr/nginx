@@ -1,4 +1,6 @@
 configs:
+  airloom_prod_conf:
+    file: ./sites/airloom-prod.conf.template
   common_conf:
     file: ./sites/00-common.conf.template
   catwlk_prod_conf:
@@ -11,10 +13,28 @@ configs:
     file: ./sites/le-petit-coin-prod.conf.template
   vif_prod_conf:
     file: ./sites/vif-prod.conf.template
+  makepad_landing_prod_conf:
+    file: ./sites/makepad-landing-prod.conf.template
+  evidella_prod_conf:
+    file: ./sites/evidella-prod.conf.template
+  openpanel_prod_conf:
+    file: ./sites/openpanel-prod.conf.template
+  runtrace_prod_conf:
+    file: ./sites/runtrace-prod.conf.template
+  brio_staging_conf:
+    file: ./sites/brio-staging.conf.template
+  maildev_brio_staging_conf:
+    file: ./sites/maildev-brio-staging.conf.template
 
 services:
   nginx:
-    image: nginx:1.28-alpine
+    image: nginx:1.31-alpine3.24@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       CATWLK_PROD_SERVER_NAME: ${CATWLK_PROD_SERVER_NAME:-localhost}
       CATWLK_CANARY_SERVER_NAME: ${CATWLK_CANARY_SERVER_NAME:-canary.localhost}
@@ -23,6 +43,23 @@ services:
       LE_PETIT_COIN_PROD_UPSTREAM: ${LE_PETIT_COIN_PROD_UPSTREAM:-http://le-petit-coin-backend:8080}
       VIF_PROD_SERVER_NAME: ${VIF_PROD_SERVER_NAME:-vif.localhost}
       VIF_PROD_UPSTREAM: ${VIF_PROD_UPSTREAM:-http://vif-apisix:9080}
+      MAKEPAD_LANDING_PROD_SERVER_NAME: ${MAKEPAD_LANDING_PROD_SERVER_NAME:-makepad.localhost}
+      MAKEPAD_LANDING_WWW_SERVER_NAME: ${MAKEPAD_LANDING_WWW_SERVER_NAME:-www.makepad.localhost}
+      MAKEPAD_LANDING_PROD_UPSTREAM: ${MAKEPAD_LANDING_PROD_UPSTREAM:-http://makepad-landing-prod-app:8080}
+      EVIDELLA_PROD_SERVER_NAME: ${EVIDELLA_PROD_SERVER_NAME:-evidella.localhost}
+      EVIDELLA_WWW_SERVER_NAME: ${EVIDELLA_WWW_SERVER_NAME:-www.evidella.localhost}
+      EVIDELLA_PROD_UPSTREAM: ${EVIDELLA_PROD_UPSTREAM:-http://opsbrainlanding-prod-app:8080}
+      OPENPANEL_PROD_SERVER_NAME: ${OPENPANEL_PROD_SERVER_NAME:-analytics.localhost}
+      OPENPANEL_API_UPSTREAM: ${OPENPANEL_API_UPSTREAM:-http://openpanel-api:3000}
+      OPENPANEL_DASHBOARD_UPSTREAM: ${OPENPANEL_DASHBOARD_UPSTREAM:-http://openpanel-dashboard:3000}
+      OPENPANEL_OAUTH2_PROXY_UPSTREAM: ${OPENPANEL_OAUTH2_PROXY_UPSTREAM:-http://openpanel-oauth2-proxy:4180}
+      RUNTRACE_PROD_SERVER_NAME: ${RUNTRACE_PROD_SERVER_NAME:-runtrace.localhost}
+      RUNTRACE_PROD_UPSTREAM: ${RUNTRACE_PROD_UPSTREAM:-http://runtrace-prod-app:8080}
+      BRIO_STAGING_SERVER_NAME: ${BRIO_STAGING_SERVER_NAME:-brio-staging.localhost}
+      BRIO_STAGING_UPSTREAM: ${BRIO_STAGING_UPSTREAM:-http://brio-staging-app:8080}
+      MAILDEV_BRIO_STAGING_SERVER_NAME: ${MAILDEV_BRIO_STAGING_SERVER_NAME:-maildev-brio-staging.localhost}
+      MAILDEV_BRIO_STAGING_UPSTREAM: ${MAILDEV_BRIO_STAGING_UPSTREAM:-http://maildev-brio-staging:1080}
+      MAILDEV_BRIO_STAGING_AUTH_UPSTREAM: ${MAILDEV_BRIO_STAGING_AUTH_UPSTREAM:-http://maildev-brio-staging-auth:4180}
       CATWLK_TLS_CERT_FILE: ${CATWLK_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       CATWLK_TLS_KEY_FILE: ${CATWLK_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       ALERTECONSO_TLS_CERT_FILE: ${ALERTECONSO_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
@@ -31,8 +68,22 @@ services:
       LE_PETIT_COIN_TLS_KEY_FILE: ${LE_PETIT_COIN_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       VIF_TLS_CERT_FILE: ${VIF_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
       VIF_TLS_KEY_FILE: ${VIF_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      MAKEPAD_LANDING_TLS_CERT_FILE: ${MAKEPAD_LANDING_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      MAKEPAD_LANDING_TLS_KEY_FILE: ${MAKEPAD_LANDING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      EVIDELLA_TLS_CERT_FILE: ${EVIDELLA_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      EVIDELLA_TLS_KEY_FILE: ${EVIDELLA_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      OPENPANEL_TLS_CERT_FILE: ${OPENPANEL_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      OPENPANEL_TLS_KEY_FILE: ${OPENPANEL_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      RUNTRACE_TLS_CERT_FILE: ${RUNTRACE_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      RUNTRACE_TLS_KEY_FILE: ${RUNTRACE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      BRIO_STAGING_TLS_CERT_FILE: ${BRIO_STAGING_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      BRIO_STAGING_TLS_KEY_FILE: ${BRIO_STAGING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
+      MAILDEV_BRIO_STAGING_TLS_CERT_FILE: ${MAILDEV_BRIO_STAGING_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}
+      MAILDEV_BRIO_STAGING_TLS_KEY_FILE: ${MAILDEV_BRIO_STAGING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
+      - source: airloom_prod_conf
+        target: /etc/nginx/templates/airloom-prod.conf.template
       - source: common_conf
         target: /etc/nginx/templates/00-common.conf.template
       - source: catwlk_prod_conf
@@ -45,16 +96,42 @@ services:
         target: /etc/nginx/templates/le-petit-coin-prod.conf.template
       - source: vif_prod_conf
         target: /etc/nginx/templates/vif-prod.conf.template
+      - source: makepad_landing_prod_conf
+        target: /etc/nginx/templates/makepad-landing-prod.conf.template
+      - source: evidella_prod_conf
+        target: /etc/nginx/templates/evidella-prod.conf.template
+      - source: openpanel_prod_conf
+        target: /etc/nginx/templates/openpanel-prod.conf.template
+      - source: runtrace_prod_conf
+        target: /etc/nginx/templates/runtrace-prod.conf.template
+      - source: brio_staging_conf
+        target: /etc/nginx/templates/brio-staging.conf.template
+      - source: maildev_brio_staging_conf
+        target: /etc/nginx/templates/maildev-brio-staging.conf.template
     networks:
+      - airloom_prod_app
       - prod_app
       - canary_app
       - alerteconso_prod_app
       - le_petit_coin_prod_app
       - vif_prod_app
+      - makepad_landing_prod_app
+      - evidella_prod_app
+      - openpanel_prod_app
+      - runtrace_prod_app
+      - brio_staging_app
+      - maildev_brio_staging_web
 
 networks:
+  airloom_prod_app:
   prod_app:
   canary_app:
   alerteconso_prod_app:
   le_petit_coin_prod_app:
   vif_prod_app:
+  makepad_landing_prod_app:
+  evidella_prod_app:
+  openpanel_prod_app:
+  runtrace_prod_app:
+  brio_staging_app:
+  maildev_brio_staging_web:

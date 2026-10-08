@@ -1,0 +1,87 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${RUNTRACE_PROD_SERVER_NAME};
+
+    location /.well-known/acme-challenge/ {
+        root ${CATWLK_ACME_WEBROOT};
+        default_type text/plain;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${RUNTRACE_PROD_SERVER_NAME};
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    ssl_certificate ${RUNTRACE_TLS_CERT_FILE};
+    ssl_certificate_key ${RUNTRACE_TLS_KEY_FILE};
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    access_log /dev/stdout runtrace_json;
+    error_log /dev/stderr warn;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Request-ID $request_id always;
+
+    client_max_body_size 4m;
+    client_body_timeout 60s;
+    limit_req_status 429;
+    limit_conn_status 429;
+    limit_conn runtrace_connections 40;
+
+    location = /telemetry-batches {
+        client_max_body_size 64m;
+        client_body_timeout 300s;
+        limit_req zone=runtrace_telemetry burst=5 nodelay;
+        set $runtrace_prod_upstream ${RUNTRACE_PROD_UPSTREAM};
+        proxy_pass $runtrace_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_request_buffering on;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_hide_header X-Request-ID;
+    }
+
+    location / {
+        limit_req zone=runtrace_general burst=60 nodelay;
+        set $runtrace_prod_upstream ${RUNTRACE_PROD_UPSTREAM};
+        proxy_pass $runtrace_prod_upstream;
+        proxy_http_version 1.1;
+        proxy_buffer_size 32k;
+        proxy_buffers 8 32k;
+        proxy_busy_buffers_size 64k;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_hide_header X-Request-ID;
+    }
+}

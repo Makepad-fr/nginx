@@ -186,6 +186,13 @@ supports `--check` for host-side syntax validation without deployment.
 
 The additive Brio ingress deployment also applies the `nginx -t` health check declared in `compose.yml` to older shared services. It verifies healthy convergence and retains the existing rollback behavior.
 
+## Airloom support website
+
+Airloom at `airloom.makepad.fr` uses the shared proxy and its dedicated encrypted attachable overlay `makepad_airloom_prod_app`. The app's `DEPLOY_APP_NETWORK` matches `MAKEPAD_PROXY_AIRLOOM_APP_NETWORK`. It serves static content at `airloom-prod-web:8080` with no published app ports.
+
+Provision the overlay with `docker network create --driver overlay --attachable --opt encrypted=true --label com.makepad.owner=Makepad-fr/nginx makepad_airloom_prod_app`. Deploy the reviewed Airloom container first. Run `scripts/deploy-airloom-ingress.py --bootstrap --check` then `--bootstrap` for HTTP/ACME. Issue the hostname certificate using the host's existing Certbot account and `/var/lib/letsencrypt` webroot. Run the script with `--check`, then without flags, for HTTPS. The existing Certbot timer and deploy hook renew certificates and reload the shared proxy.
+
+The scoped helper validates all current rendered routes and verifies the stored content of reused Docker configs before replacing only Airloom's config, checks service-version drift, preserves existing networks/mounts/environment/image, and checks health after convergence. Do not redeploy a stale full stack over live application-owned additions. Verify `/support`, `/privacy`, missing-path 404, HTTP redirect, TLS hostname/chain/expiry and unrelated public routes after deployment. Retain the prior service spec and image for rollback.
 ## Makepad Scan
 
 Makepad Scan uses scan.makepad.fr and sites/scan.conf.template. Add the scanner application overlay (MAKEPAD_PROXY_SCAN_APP_NETWORK=makepad_scan_app) to the existing proxy and mount only the new virtual host. Validate all existing virtual hosts before reloading; preserve current image, networks and configuration mounts.
@@ -195,6 +202,19 @@ Makepad Scan uses scan.makepad.fr and sites/scan.conf.template. Add the scanner 
 Pluck uses `pluck.makepad.fr` (A: `135.181.141.31`) and `sites/pluck.conf.template`. Keep `sites/scan.conf.template` mounted for legacy apps and links. Both hosts proxy to the same protected scanner API without redirects between hosts. Issue the Pluck certificate using the existing `/var/lib/letsencrypt` webroot before adding the TLS virtual host. The existing Certbot renewal hook reloads the shared proxy. Add only the new immutable configuration to the running proxy, preserving its existing image, mounts, networks, and virtual hosts; rollback removes only that configuration. Validate the full live configuration before updating the service.
 
 For the additive Pluck activation, run `python3 scripts/deploy-pluck-ingress.py` on the app VM from this checked-out repository after certificate issuance. It saves a protected pre-update snapshot, validates the full candidate Nginx configuration using the current image and network, detects concurrent service changes, preserves existing configuration IDs and networks, and rolls back a failed update. A second activation fails closed rather than adding duplicate routes.
+
+## Posey landing page and existing community routes
+
+The template preserves the already-live `/api/community/` API and exact Apple association route. Real-Nginx CI tests cover route boundaries, backend rejection forwarding, and scoped upload limits.
+
+`posey.makepad.fr` routes to `posey-prod_web:8080` on encrypted attachable overlay `makepad_posey_prod_app`. Use the additive `scripts/deploy-posey-ingress.py` helper to preserve unrelated routes. `--bootstrap` installs HTTP ACME only; `--check` validates a candidate without modifying the proxy. Issue TLS into `/etc/letsencrypt/live/posey.makepad.fr/` using the existing webroot and account, then apply the HTTPS template. Existing certificate renewal reloads the proxy. Do not deploy the entire shared proxy stack for this change.
+## CartHop additive ingress
+
+CartHop uses the encrypted `makepad_carthop_prod_app` overlay (`MAKEPAD_PROXY_CARTHOP_APP_NETWORK`, matching the app's `DEPLOY_APP_NETWORK`) and `carthop.makepad.fr`. The optional `compose.carthop.yml` overlay adds only its network/config to the base compose files. This overlay introduces no credential or workflow secret.
+
+For the live shared ingress, `scripts/deploy-carthop-ingress.py --check` validates a candidate with every current route. `--bootstrap` installs only HTTP ACME routing; after certificate issuance, run without that flag to install HTTPS. The script verifies reused config contents, checks service-version drift, preserves all unrelated config IDs and networks, and relies on existing Swarm rollback. It never replaces the complete shared stack. Access logging is disabled on this route to avoid retaining query locations or account details. CartHop owns its backend, TLS issuance/renewal operation, and service acceptance checks.
+
+Run `python3 scripts/test-carthop-ingress.py` before a CartHop ingress change. CI runs this suite together with the config-content checks. These non-mutating tests reject stale config IDs, missing networks and rolled-back updates. The deploy helper additionally runs `nginx -t` with all live routes before updating anything, and checks unrelated configs, mounts, environment, image and networks afterward.
 
 ### Brio private event photos
 
@@ -263,3 +283,95 @@ This replaces the undeployed second cross-host coordinator proposed in old
 PRs #14–#16. No KVM/JIT runners, new GitHub Apps, root credentials, host users or
 second lease authority are required. The current protected runner and credential
 inventory remain unchanged. The helper itself contains no secrets.
+
+### Vif staging routes (explicit opt-in)
+
+`sites/vif-staging.conf.template` reserves `/walking-club` for the existing Brio
+app and `/platform` for the isolated Vif platform. `/` is an empty 204 response;
+unknown paths and unapproved hosts fail closed. The CNAME target
+`domains.staging.vif.io` serves ACME challenges but never community content.
+All HTTPS responses carry `noindex`; forwarding headers are overwritten or
+removed, and the existing privacy log format excludes URLs and identities.
+
+The staging HTTPS edge owns the cache policy: it suppresses upstream
+`Cache-Control` fields and emits exactly one `Cache-Control: private, no-store`
+field, including for authenticated downloads and private media. This also
+overrides public cache directives from application assets. Keep the application's
+own private-response headers for direct upstream access; do not remove them to
+resolve duplicate edge headers. The ingress fixture verifies identical and
+conflicting upstream policies. After a route update, confirm the single header
+on a synthetic account export through the actual staging hostname.
+
+The dormant `envs/production/vif-staging.compose.yml` overlay requires
+`MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK=makepad_vif_platform_staging_edge`,
+matching the application platform edge network. Store it in the protected GitHub
+Environment and Proton Pass before deployment. Shared ingress owns the encrypted
+attachable overlay; the platform application attaches to it. Use the existing
+Brio deployment lock and a scoped, reviewed ingress update with an immutable
+`vif_staging_` config after runtime, migration and TLS verification. The ordinary
+shared release retains an installed Vif route and its platform network but does
+not activate the dormant overlay. Production `vif.io` is unchanged.
+
+The local Nginx integration fixture checks actual host/path dispatch, prefix
+boundaries, forwarding-header redaction, CNAME denial, robots and staging
+headers without exposing host ports. It is not browser or live-staging evidence.
+
+Run `scripts/provision-vif-platform-edge.sh` on the existing app-host Swarm
+manager before starting the platform; it refuses a mismatched existing network.
+The platform overlay name is inventoried as the app-scoped
+`MAKEPAD_PROXY_VIF_PLATFORM_STAGING_APP_NETWORK` secret in this shared repo's
+protected infrastructure environment, sourced from the same Proton Pass field
+as the application's `VIF_PLATFORM_EDGE_NETWORK`.
+
+After the staging services and certificate are ready, invoke the existing scoped
+installer with `--vif-staging --check`, then `--vif-staging`. This selects only the
+new route and platform edge network, retaining the old Brio/MailDev routes and
+all production configurations. Supply the inventoried overlay setting in the
+protected operator's proxy environment file. The installer holds the Brio
+release lock, validates the combined Nginx configuration with existing mounts,
+verifies unchanged shared resources, and refuses to roll back an unrelated
+concurrent update. The caller must bind the operator run to reviewed source and
+its passing CI and retain the source/configuration identifiers in Slack evidence.
+
+For the reviewed Brio migration, add `--legacy-cutover` to both the check and
+apply commands. This replaces only the old Brio application virtual host: public
+GET/HEAD links redirect to the Walking Club base path, obsolete OIDC callbacks
+start fresh login without carrying codes, and signed Stripe/Tally POST bodies
+continue to the corresponding prefixed webhook. Other mutations are rejected.
+MailDev and production routes remain unchanged. The shared release preserves
+this explicitly installed replacement; the scoped installer's rollback restores
+the prior service specification if its own update fails.
+
+## Vif public landing and community routes
+
+The explicit staging overlay sends `/` and `/assets/vif/` to the independent
+Go landing process `vif-landing-app:8080`. It removes browser cookies and
+Authorization before forwarding. `/walking-club` and `/platform` retain their
+existing exact-boundary upstreams and full paths; no landing-service redirect
+selects a community. Unknown paths fail closed. All staging remains noindex.
+
+First provision the inventoried landing edge with
+`scripts/provision-vif-landing-edge.sh`, deploy the reviewed landing image from
+Makepad-fr/brio, then use the existing locked `deploy-brio-ingress.py
+--vif-staging --check` and deployment procedure. The public landing has no
+community/database network. Capture the previous edge specification for rollback.
+Do not activate production as part of this staging operation.
+
+`docs/vif-production-routing.conf.example` prepares the equivalent production
+host/path layout without activating it. It is not included by any compose or
+deployment command. Production media requires its own reviewed route and storage
+policy; never copy the staging object bucket into production.
+
+### Preserve the landing during later shared releases
+
+The ordinary shared release reuses the exact existing opt-in Vif route config
+and its dedicated landing network. Both must be retained together: preserving
+only the route leaves nginx unable to resolve the landing upstream. The renderer
+regression in `tests/test_preserve_vif_landing.py` executes the workflow's actual
+render step against a prior service containing that network and checks that the
+config, external network and aliases survive.
+
+Keep the landing service's deployment receipt separate from the edge receipt.
+An edge rollback restores the previous edge specification; it must not roll back
+community data or replace another project's routes. A landing-only rollback uses
+its own service specification and leaves all community runtimes in place.

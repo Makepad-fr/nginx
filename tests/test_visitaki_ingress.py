@@ -61,6 +61,41 @@ class ScopedUpdates(unittest.TestCase):
         self.assertEqual(result['services']['nginx']['image'], 'existing')
         self.assertIn('neighbor', result['services']['nginx']['networks'])
         self.assertIn('makepad_keycloak_visitaki_proxy', result['services']['nginx']['networks'])
+        before['TaskTemplate']['ContainerSpec']['Configs'][0] = {
+            'ConfigName': 'vif_staging_verified_revision',
+            'File': {'Name': '/etc/nginx/templates/vif-staging.conf.template', 'Mode': 292},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'before').write_text(json.dumps(before))
+            (root / 'base').write_text(json.dumps(base))
+            with patch('sys.argv', ['inline', str(root / 'before'), str(root / 'base'), str(root / 'result')]), patch('subprocess.check_output', return_value=b'[{"Name":"makepad_vif_platform_staging_edge"}]'):
+                exec(compile(code, 'vif-release-retention', 'exec'), {})
+            result = json.loads((root / 'result').read_text())
+        self.assertIn('vif_staging_verified_revision', result['configs'])
+        self.assertIn('makepad_vif_platform_staging_edge', result['services']['nginx']['networks'])
+        self.assertEqual(result['services']['nginx']['image'], 'existing')
+
+
+    def test_shared_release_keeps_reviewed_legacy_cutover_exactly_once(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/manual-deploy.yml').read_text()
+        block = workflow.split("python3 - \"${prior_spec}\" \"${remote_dir}/stack.json\" \"${remote_dir}/stack.yml\" <<'PY'\n", 1)[1].split('\n          PY', 1)[0]
+        code = textwrap.dedent(block)
+        target = '/etc/nginx/templates/brio-staging.conf.template'
+        for old_name, expected in [('vif_staging_brio_cutover', 'vif_staging_brio_cutover'), ('brio_original', 'generated_brio')]:
+            before = {'TaskTemplate': {'ContainerSpec': {'Configs': [{'ConfigName': old_name, 'File': {'Name': target, 'Mode': 292}}]}}}
+            base = {'services': {'nginx': {'configs': [{'source': 'generated_brio', 'target': target}, {'source': 'neighbor', 'target': '/neighbor'}]}}}
+            with tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / 'before').write_text(json.dumps(before))
+                (root / 'base').write_text(json.dumps(base))
+                with patch('sys.argv', ['inline', str(root / 'before'), str(root / 'base'), str(root / 'result')]):
+                    exec(compile(code, 'legacy-release-retention', 'exec'), {})
+                result = json.loads((root / 'result').read_text())
+            configs = result['services']['nginx']['configs']
+            self.assertEqual([c['source'] for c in configs if c['target'] == target], [expected])
+            self.assertIn({'source': 'neighbor', 'target': '/neighbor'}, configs)
+
 
 
 if __name__ == '__main__':

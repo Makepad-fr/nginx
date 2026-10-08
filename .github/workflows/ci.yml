@@ -61,6 +61,8 @@ jobs:
           set -euo pipefail
           python3 ./scripts/test-posey-config.py
           python3 ./scripts/test-posey-ingress.py
+          python3 ./scripts/test-carthop-config.py
+          python3 ./scripts/test-carthop-ingress.py
           python3 ./scripts/test-airloom-ingress.py
           python3 ./scripts/test-airloom-config.py
           python3 ./scripts/validate-credential-inventory.py ./deploy/credential-inventory.json

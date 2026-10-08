@@ -31,6 +31,18 @@ def verify_applied(after, expected_configs, required_networks):
     if not required_networks <= attached:
         raise RuntimeError('Expected CartHop network was not attached')
 
+def verified_config(config_name, content):
+    existing = subprocess.run(['docker', 'config', 'inspect', config_name], capture_output=True)
+    if existing.returncode:
+        run('docker', 'config', 'create', '--label', 'com.makepad.owner=Makepad-fr/nginx', config_name, '-', input=content.encode())
+        raw = run('docker', 'config', 'inspect', config_name)
+    else:
+        raw = existing.stdout
+    config = json.loads(raw)[0]
+    if base64.b64decode(config['Spec']['Data'], validate=True) != content.encode():
+        raise RuntimeError('Existing CartHop config content differs from the validated route')
+    return config['ID']
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
@@ -83,10 +95,7 @@ def main():
             for name, content in rendered.items():
                 digest = hashlib.sha256(content.encode()).hexdigest()[:16]
                 config_name = 'carthop_'+name.replace('.', '_')+'_'+digest
-                exists = subprocess.run(['docker', 'config', 'inspect', config_name], capture_output=True)
-                if exists.returncode:
-                    run('docker', 'config', 'create', '--label', 'com.makepad.owner=Makepad-fr/nginx', config_name, '-', input=content.encode())
-                expected_configs['/etc/nginx/templates/'+name] = json.loads(run('docker', 'config', 'inspect', config_name))[0]['ID']
+                expected_configs['/etc/nginx/templates/'+name] = verified_config(config_name, content)
                 changes.extend(['--config-add', 'source='+config_name+',target=/etc/nginx/templates/'+name+',mode=0444'])
             try:
                 try:

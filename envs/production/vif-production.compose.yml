@@ -1,0 +1,20 @@
+# Explicit Vif production activation; preserve every unrelated route and network.
+configs:
+  vif_prod_conf:
+    file: ./sites/vif-production.conf.template
+services:
+  nginx:
+    networks:
+      - vif_walking_production_app
+      - vif_platform_production_app
+      - vif_landing_production_app
+networks:
+  vif_walking_production_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VIF_WALKING_PRODUCTION_APP_NETWORK:?isolated community edge required}
+  vif_platform_production_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VIF_PLATFORM_PRODUCTION_APP_NETWORK:?isolated platform edge required}
+  vif_landing_production_app:
+    external: true
+    name: ${MAKEPAD_PROXY_VIF_LANDING_PRODUCTION_APP_NETWORK:?isolated landing edge required}

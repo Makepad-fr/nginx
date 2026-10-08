@@ -381,3 +381,24 @@ its own service specification and leaves all community runtimes in place.
 `pocketgremlin.makepad.fr` serves the existing Makepad landing application's `/pocket-gremlin/` pages through its already-attached `makepad_landing_prod_app` overlay. The route preserves relative assets and exposes landing, privacy, and support pages. Use `python3 scripts/deploy-pocket-gremlin-ingress.py --check` on the app host for full live syntax/TLS-file validation, then run without `--check` to activate the exact reviewed checkout. The dedicated certificate must already exist. The helper preserves every unrelated service field and route, verifies stored configuration contents, checks completed convergence, and relies on Swarm's existing automatic rollback. It does not change the shared landing network or require a root shell.
 
 CI exercises actual Nginx forwarding, route failures, and configuration integrity. Verify live TLS, all three pages, CSS and neighboring services after activation.
+
+### BetaCrew scoped ingress and certificate renewal
+
+`sites/betacrew-prod.conf.template` and `envs/production/.env.betacrew`
+describe the existing BetaCrew host. Reconcile it with
+`scripts/deploy-betacrew-overlay.sh --check`, then the same command without
+`--check`. This requires the existing reviewed environment, mounted certificates,
+and app overlay; it preserves all other proxy routes, mounts, environment and
+networks. It does not reconstruct the shared stack from the Compose baseline.
+
+After a successful app-scoped certificate renewal,
+`scripts/renew-betacrew-cert.sh` validates and reloads the existing Nginx
+configuration without replacing its service or routes. The certificate paths
+remain under `/srv/makepad/nginx/betacrew-letsencrypt` and the ACME webroot under
+`/srv/makepad/nginx/betacrew-acme`. The issue/renewal scripts require these
+existing mounts and the already installed HTTP challenge route.
+
+Run `python3 scripts/test-betacrew-ingress.py` and
+`python3 scripts/test-betacrew-routing.py` before release. CI exercises configuration
+and convergence failures, safe reload behavior, real proxy routing and redirects,
+security headers, and the accepted/rejected upload boundary.

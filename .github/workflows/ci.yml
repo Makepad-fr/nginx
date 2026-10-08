@@ -60,6 +60,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p test_pocket_gremlin_ingress.py
+          python3 ./scripts/test-betacrew-ingress.py
+          python3 ./scripts/test-betacrew-routing.py
           python3 ./scripts/test-pocket-gremlin-ingress.py
           python3 ./scripts/test-pocket-gremlin-config.py
           python3 ./scripts/test-pocket-gremlin-routing.py

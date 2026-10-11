@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Add Sentry routes to the existing shared ingress without replacing other projects."""
+from brio_release_guard import deployment_guard
 import argparse
 import base64
 import fcntl
@@ -21,13 +22,21 @@ def run(*args, **kwargs):
 def inspect():
     return json.loads(run('docker', 'service', 'inspect', SERVICE))[0]
 
+
+def rollback_owned(before, current):
+    if current['Spec'] == before['Spec']:
+        return False
+    if current.get('PreviousSpec') != before['Spec']:
+        raise RuntimeError('Ingress history changed; refusing to revert an unrelated deployment')
+    return True
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--bootstrap", action="store_true", help="Serve only HTTP ACME while provisioning TLS")
     args = parser.parse_args()
     os.umask(0o077)
-    with open('/tmp/makepad-sentry-ingress.lock', 'a') as lock:
+    with deployment_guard(), open('/tmp/makepad-sentry-ingress.lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         before = inspect()
         spec = before['Spec']['TaskTemplate']['ContainerSpec']
@@ -77,6 +86,8 @@ def main():
                 if exists.returncode:
                     run('docker', 'config', 'create', '--label', 'com.makepad.owner=Makepad-fr/nginx', config_name, '-', input=content.encode())
                 changes.extend(['--config-add', 'source='+config_name+',target=/etc/nginx/templates/'+name+',mode=0444'])
+            if inspect()['Version']['Index'] != before['Version']['Index']:
+                raise RuntimeError('Shared ingress changed before update; retry after review')
             try:
                 try:
                     run('docker', 'service', 'update', '--detach=false', *changes, SERVICE, stderr=subprocess.STDOUT)
@@ -108,7 +119,7 @@ def main():
             except BaseException:
                 # CLI validation can fail before changing the service. Rolling
                 # back in that case would revert an unrelated prior deployment.
-                if inspect()['Version']['Index'] != before['Version']['Index']:
+                if rollback_owned(before, inspect()):
                     run('docker', 'service', 'rollback', '--detach=false', SERVICE, stderr=subprocess.STDOUT)
                 raise
 

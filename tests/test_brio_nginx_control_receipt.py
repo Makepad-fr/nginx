@@ -190,7 +190,8 @@ class BrioNginxControlReceiptTests(unittest.TestCase):
         self.assertEqual(receipt["controls"]["routes"]["mailCapture"]["authUpstream"], MODULE.MAILDEV_AUTH_UPSTREAM)
         serialized = json.dumps(receipt, sort_keys=True, separators=(",", ":"))
         self.assertNotIn("privkey", serialized)
-        self.assertNotIn("cookie", serialized.lower())
+        self.assertFalse(receipt["controls"]["routes"]["eventStorage"]["cookieForwarding"])
+        self.assertNotIn("cookie", serialized.lower().replace("cookieforwarding", ""))
         self.assertEqual(serialized, json.dumps(json.loads(serialized), sort_keys=True, separators=(",", ":")))
 
     def test_rendered_route_or_upstream_drift_fails_closed(self) -> None:

@@ -1,0 +1,15 @@
+# Optional additive overlay for CartHop. Does not replace existing proxy networks/configs.
+services:
+  nginx:
+    configs:
+      - source: carthop_prod_conf
+        target: /etc/nginx/templates/carthop-prod.conf.template
+    networks:
+      - carthop_prod_app
+configs:
+  carthop_prod_conf:
+    file: ./sites/carthop-prod.conf.template
+networks:
+  carthop_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_CARTHOP_APP_NETWORK:-makepad_carthop_prod_app}

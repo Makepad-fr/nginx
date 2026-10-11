@@ -88,3 +88,5 @@ repeat the names-only audit, and rerun the same idempotent production sync.
 Network fields remain environment secrets for compatibility with the existing
 workflow. Deployment coordinates are environment variables and are
 exact-compared after sync.
+
+The explicit Vif staging overlay also requires `MAKEPAD_PROXY_VIF_LANDING_STAGING_APP_NETWORK`, sourced from `Vif Staging - Landing Runtime` / `VIF_LANDING_EDGE_NETWORK`. It is not activated by an ordinary production release.

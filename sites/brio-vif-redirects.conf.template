@@ -1,0 +1,66 @@
+# Enabled only by the reviewed --vif-staging --legacy-cutover operation.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name brio-staging.makepad.fr;
+    access_log /dev/stdout brio_privacy;
+    error_log /dev/stderr crit;
+    add_header X-Robots-Tag "noindex, nofollow" always;
+    if ($host != brio-staging.makepad.fr) { return 421; }
+    location /.well-known/acme-challenge/ { root /var/lib/letsencrypt; }
+    location = /auth/callback { return 303 https://staging.vif.io/walking-club/auth/login; }
+    location / {
+        if ($request_method !~ "^(GET|HEAD)$") { return 405; }
+        return 308 https://staging.vif.io/walking-club$request_uri;
+    }
+}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name brio-staging.makepad.fr;
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    ssl_certificate /etc/letsencrypt/live/brio-staging.makepad.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/brio-staging.makepad.fr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+    access_log /dev/stdout brio_privacy;
+    error_log /dev/stderr crit;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Cache-Control "private, no-store" always;
+    add_header Referrer-Policy no-referrer always;
+    if ($host != brio-staging.makepad.fr) { return 421; }
+    client_max_body_size 1m;
+    client_body_timeout 20s;
+    proxy_http_version 1.1;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 30s;
+    proxy_send_timeout 30s;
+    proxy_set_header Connection "";
+    proxy_set_header Host staging.vif.io;
+    proxy_set_header X-Forwarded-Host staging.vif.io;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Port "";
+    proxy_set_header X-Forwarded-For "";
+    proxy_set_header X-Real-IP "";
+    proxy_set_header Forwarded "";
+    proxy_set_header Cookie "";
+    proxy_set_header Authorization "";
+    proxy_set_header X-Request-ID $request_id;
+    # Old OIDC transactions require a fresh login; never redirect their codes.
+    location = /auth/callback { return 303 https://staging.vif.io/walking-club/auth/login; }
+    location = /webhooks/stripe {
+        if ($request_method != POST) { return 405; }
+        set $vif_walking http://brio-staging-app:8080;
+        proxy_pass $vif_walking/walking-club/webhooks/stripe$is_args$args;
+    }
+    location = /webhooks/tally {
+        if ($request_method != POST) { return 405; }
+        set $vif_walking http://brio-staging-app:8080;
+        proxy_pass $vif_walking/walking-club/webhooks/tally$is_args$args;
+    }
+    location / {
+        if ($request_method !~ "^(GET|HEAD)$") { return 405; }
+        return 308 https://staging.vif.io/walking-club$request_uri;
+    }
+}

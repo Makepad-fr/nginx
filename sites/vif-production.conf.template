@@ -1,0 +1,109 @@
+# Activated only by the explicit Vif production overlay after provider readiness.
+# Provision isolated production networks, TLS and reviewed service aliases first.
+# Retain the shared privacy log/rate-limit declarations from 00-common.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name vif.io;
+    access_log /dev/stdout brio_privacy;
+    error_log /dev/stderr crit;
+    if ($host != vif.io) { return 421; }
+    location /.well-known/acme-challenge/ { root /var/lib/letsencrypt; }
+    location / { return 308 https://$host$request_uri; }
+}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name vif.io;
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    ssl_certificate /etc/letsencrypt/live/vif.io/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/vif.io/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_tickets off;
+    access_log /dev/stdout brio_privacy;
+    error_log /dev/stderr crit;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    # Preserve private responses during initial production activation.
+    proxy_hide_header Cache-Control;
+    add_header Cache-Control "private, no-store" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options DENY always;
+    add_header X-Request-ID $request_id always;
+    if ($host != vif.io) { return 421; }
+    client_max_body_size 1m;
+    client_body_timeout 20s;
+    limit_req_status 429;
+    limit_conn_status 429;
+    limit_conn brio_staging_connections 30;
+    proxy_http_version 1.1;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
+    proxy_set_header Connection "";
+    proxy_set_header Host vif.io;
+    proxy_set_header X-Forwarded-Host vif.io;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Port "";
+    proxy_set_header X-Forwarded-For "";
+    proxy_set_header X-Real-IP "";
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Request-ID $request_id;
+    # Exact public entry and namespaced assets; never a catch-all community router.
+    location = / {
+        limit_req zone=brio_staging_general burst=40 nodelay;
+        set $vif_landing http://vif-landing-production-app:8080;
+        proxy_pass $vif_landing;
+        proxy_set_header Host vif.io;
+        proxy_set_header X-Forwarded-Host vif.io;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port "";
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header Connection "";
+        proxy_set_header Cookie "";
+        proxy_set_header Authorization "";
+    }
+    location ^~ /assets/vif/ {
+        limit_req zone=brio_staging_general burst=40 nodelay;
+        set $vif_landing http://vif-landing-production-app:8080;
+        proxy_pass $vif_landing;
+        proxy_set_header Host vif.io;
+        proxy_set_header X-Forwarded-Host vif.io;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Port "";
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header Connection "";
+        proxy_set_header Cookie "";
+        proxy_set_header Authorization "";
+    }
+    location = /robots.txt { return 200 "User-agent: *\nAllow: /\n"; }
+    location = /walking-club/applications {
+        limit_req zone=brio_staging_apply burst=2 nodelay;
+        set $vif_walking http://vif-walking-club-production-app:8080;
+        proxy_pass $vif_walking;
+    }
+    location ~ "^/walking-club/admin/(?:events(?:/[a-f0-9-]{36})?|photo-library)$" {
+        client_max_body_size 11m;
+        limit_req zone=brio_staging_general burst=40 nodelay;
+        set $vif_walking http://vif-walking-club-production-app:8080;
+        proxy_pass $vif_walking;
+    }
+    location ~ "^/walking-club(?:/|$)" {
+        limit_req zone=brio_staging_general burst=40 nodelay;
+        set $vif_walking http://vif-walking-club-production-app:8080;
+        proxy_pass $vif_walking;
+    }
+    location ~ "^/platform(?:/|$)" {
+        limit_req zone=brio_staging_general burst=40 nodelay;
+        set $vif_platform http://vif-platform-production-app:8080;
+        proxy_pass $vif_platform;
+    }
+    location / { return 404; }
+}

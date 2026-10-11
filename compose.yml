@@ -3,6 +3,8 @@ configs:
     file: ./sites/sentry-prod.conf.template
   consent_lens_prod_conf:
     file: ./sites/consent-lens-prod.conf.template
+  airloom_prod_conf:
+    file: ./sites/airloom-prod.conf.template
   common_conf:
     file: ./sites/00-common.conf.template
   catwlk_prod_conf:
@@ -30,7 +32,7 @@ configs:
 
 services:
   nginx:
-    image: nginx:1.30-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46
+    image: nginx:1.31-alpine3.24@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
     healthcheck:
       test: ["CMD", "nginx", "-t"]
       interval: 15s
@@ -88,6 +90,8 @@ services:
         target: /etc/nginx/templates/sentry-prod.conf.template
       - source: consent_lens_prod_conf
         target: /etc/nginx/templates/consent-lens-prod.conf.template
+      - source: airloom_prod_conf
+        target: /etc/nginx/templates/airloom-prod.conf.template
       - source: common_conf
         target: /etc/nginx/templates/00-common.conf.template
       - source: catwlk_prod_conf
@@ -115,6 +119,7 @@ services:
     networks:
       - sentry_prod_app
       - consent_lens_prod_app
+      - airloom_prod_app
       - prod_app
       - canary_app
       - alerteconso_prod_app
@@ -130,6 +135,7 @@ services:
 networks:
   sentry_prod_app:
   consent_lens_prod_app:
+  airloom_prod_app:
   prod_app:
   canary_app:
   alerteconso_prod_app:

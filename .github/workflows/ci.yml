@@ -76,6 +76,7 @@ jobs:
           python3 ./scripts/validate-credential-inventory.py ./deploy/credential-inventory.json
           python3 -m unittest ./tests/test_credential_sync.py
           python3 -m unittest ./tests/test_monitoring_ingress.py
+          python3 -m unittest ./tests/test_reload_shared_ingress.py
           python3 -m unittest ./tests/test_brio_nginx_control_receipt.py
           python3 -m unittest ./tests/test_brio_release_guard.py
           python3 -m unittest ./tests/test_vif_ingress_control.py

@@ -1,0 +1,119 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${MAILDEV_BRIO_STAGING_SERVER_NAME};
+
+    access_log /dev/stdout brio_privacy;
+    error_log /dev/stderr crit;
+
+    location /.well-known/acme-challenge/ {
+        root ${CATWLK_ACME_WEBROOT};
+        default_type text/plain;
+    }
+
+    location / {
+        return 301 https://${MAILDEV_BRIO_STAGING_SERVER_NAME}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${MAILDEV_BRIO_STAGING_SERVER_NAME};
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
+    ssl_certificate ${MAILDEV_BRIO_STAGING_TLS_CERT_FILE};
+    ssl_certificate_key ${MAILDEV_BRIO_STAGING_TLS_KEY_FILE};
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:BRIO_MAILDEV_SSL:10m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    access_log /dev/stdout brio_privacy;
+    # OAuth callbacks and MailDev routes may carry secrets in the query string.
+    error_log /dev/stderr crit;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header Cache-Control "private, no-store" always;
+    add_header X-Request-ID $request_id always;
+
+    client_max_body_size 6m;
+    limit_req_status 429;
+    limit_conn_status 429;
+    limit_conn brio_staging_connections 15;
+
+    location = /oauth2/auth {
+        internal;
+        set $maildev_auth_upstream ${MAILDEV_BRIO_STAGING_AUTH_UPSTREAM};
+        proxy_pass $maildev_auth_upstream/oauth2/auth;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header X-Original-URI "";
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+    }
+
+    location /oauth2/ {
+        set $maildev_auth_upstream ${MAILDEV_BRIO_STAGING_AUTH_UPSTREAM};
+        proxy_pass $maildev_auth_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host ${MAILDEV_BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host ${MAILDEV_BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+    }
+
+    location @maildev_sign_in {
+        return 302 /oauth2/start?rd=https://${MAILDEV_BRIO_STAGING_SERVER_NAME}/;
+    }
+
+    # MailDev 3 uses /email/:id/relay; retain the optional /api prefix in the
+    # deny rule as a fail-closed guard for older route layouts.
+    location ~ ^/(?:api/)?email/[^/]+/relay(?:/|$) {
+        return 403;
+    }
+
+    location /socket.io/ {
+        auth_request /oauth2/auth;
+        error_page 401 = @maildev_sign_in;
+        set $maildev_upstream ${MAILDEV_BRIO_STAGING_UPSTREAM};
+        proxy_pass $maildev_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host ${MAILDEV_BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+    }
+
+    location / {
+        auth_request /oauth2/auth;
+        error_page 401 = @maildev_sign_in;
+        limit_req zone=brio_staging_general burst=20 nodelay;
+        set $maildev_upstream ${MAILDEV_BRIO_STAGING_UPSTREAM};
+        proxy_pass $maildev_upstream;
+        proxy_http_version 1.1;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_set_header Connection "";
+        proxy_set_header Host ${MAILDEV_BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host ${MAILDEV_BRIO_STAGING_SERVER_NAME};
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Real-IP "";
+        proxy_set_header Forwarded "";
+        proxy_set_header X-Request-ID $request_id;
+    }
+}

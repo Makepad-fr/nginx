@@ -51,19 +51,19 @@ docker run --rm -d \
   --network "${network}" \
   --network-alias vestiaire-catalog-api \
   -v "${tmp_dir}/api.conf:/etc/nginx/nginx.conf:ro" \
-  nginx:1.28-alpine >/dev/null
+  nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236 >/dev/null
 docker run --rm -d \
   --name "${web_container}" \
   --network "${network}" \
   --network-alias vestiaire-web \
   -v "${tmp_dir}/web.conf:/etc/nginx/nginx.conf:ro" \
-  nginx:1.28-alpine >/dev/null
+  nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236 >/dev/null
 docker run --rm -d \
   --name "${developer_container}" \
   --network "${network}" \
   --network-alias vestiaire-developer-platform \
   -v "${tmp_dir}/developer.conf:/etc/nginx/nginx.conf:ro" \
-  nginx:1.28-alpine >/dev/null
+  nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236 >/dev/null
 docker run --rm -d \
   --name "${proxy_container}" \
   --network "${network}" \
@@ -76,9 +76,10 @@ docker run --rm -d \
   -e VESTIAIRE_TLS_KEY_FILE=/certs/privkey.pem \
   -e CATWLK_ACME_WEBROOT=/var/lib/letsencrypt \
   -v "${repo_root}/sites/00-common.conf.template:/etc/nginx/templates/00-common.conf.template:ro" \
+  -v "${repo_root}/sites/vestiaire-logs.conf.template:/etc/nginx/templates/vestiaire-logs.conf.template:ro" \
   -v "${repo_root}/sites/vestiaire-prod.conf.template:/etc/nginx/templates/vestiaire-prod.conf.template:ro" \
   -v "${tmp_dir}/certs:/certs:ro" \
-  nginx:1.28-alpine >/dev/null
+  nginx:1.28-alpine@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236 >/dev/null
 
 published_address=$(docker port "${proxy_container}" 443/tcp)
 test_port=${published_address##*:}

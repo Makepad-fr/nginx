@@ -14,6 +14,11 @@ services:
     volumes:
       - "${CATWLK_PROXY_LETSENCRYPT_HOST_PATH:-/etc/letsencrypt}:/etc/letsencrypt:ro"
       - "${CATWLK_PROXY_ACME_WEBROOT_HOST_PATH:-/var/lib/letsencrypt}:/var/lib/letsencrypt:ro"
+    logging:
+      driver: json-file
+      options:
+        max-size: "${MAKEPAD_PROXY_LOG_MAX_SIZE:-20m}"
+        max-file: "${MAKEPAD_PROXY_LOG_MAX_FILES:-5}"
     deploy:
       replicas: ${MAKEPAD_PROXY_REPLICAS:-1}
       placement:
@@ -29,7 +34,24 @@ services:
       rollback_config:
         parallelism: 1
         order: stop-first
+      resources:
+        limits:
+          cpus: "${MAKEPAD_PROXY_CPU_LIMIT:-1.0}"
+          memory: ${MAKEPAD_PROXY_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: "${MAKEPAD_PROXY_CPU_RESERVATION:-0.1}"
+          memory: ${MAKEPAD_PROXY_MEMORY_RESERVATION:-64M}
+
 networks:
+  sentry_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_SENTRY_APP_NETWORK:-makepad_sentry_prod_app}
+  consent_lens_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_CONSENT_LENS_APP_NETWORK:-makepad_consent_lens_prod_app}
+  airloom_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_AIRLOOM_APP_NETWORK:-makepad_airloom_prod_app}
   prod_app:
     external: true
     name: ${MAKEPAD_PROXY_PROD_APP_NETWORK}
@@ -48,27 +70,18 @@ networks:
   makepad_landing_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK}
-  runtrace_prod_app:
-    external: true
-    name: ${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}
   evidella_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_EVIDELLA_APP_NETWORK}
-  backinmysize_prod_app:
-    external: true
-    name: ${MAKEPAD_PROXY_BACKINMYSIZE_APP_NETWORK}
   openpanel_prod_app:
     external: true
     name: ${MAKEPAD_PROXY_OPENPANEL_APP_NETWORK}
-  scraping_admin_prod_app:
+  runtrace_prod_app:
     external: true
-    name: ${MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK}
-  vestiaire_web_prod_app:
+    name: ${MAKEPAD_PROXY_RUNTRACE_APP_NETWORK}
+  brio_staging_app:
     external: true
-    name: ${MAKEPAD_PROXY_VESTIAIRE_WEB_APP_NETWORK}
-  vestiaire_catalog_api_prod_app:
+    name: ${MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK:?set MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK}
+  maildev_brio_staging_web:
     external: true
-    name: ${MAKEPAD_PROXY_VESTIAIRE_CATALOG_API_APP_NETWORK}
-  vestiaire_developer_platform_prod_app:
-    external: true
-    name: ${MAKEPAD_PROXY_VESTIAIRE_DEVELOPER_PLATFORM_APP_NETWORK}
+    name: ${MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK:?set MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK}

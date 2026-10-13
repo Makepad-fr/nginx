@@ -7,7 +7,7 @@ done
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "${script_dir}/.." && pwd)
-common="${repo_root}/sites/00-common.conf.template"
+common="${repo_root}/sites/amiary-logs.conf.template"
 prod="${repo_root}/sites/amiary-prod.conf.template"
 canary="${repo_root}/sites/amiary-canary.conf.template"
 common_proxy="${repo_root}/sites/amiary-common-proxy.conf"
@@ -53,9 +53,6 @@ require_text "${common_proxy}" 'proxy_request_buffering off;'
 require_text "${common_proxy}" 'proxy_buffering off;'
 # shellcheck disable=SC2016
 require_text "${common_proxy}" 'proxy_set_header X-Request-ID $request_id;'
-require_text "${deploy_workflow}" 'ensure_encrypted_amiary_network'
-require_text "${deploy_workflow}" 'docker network create --driver overlay --attachable --opt encrypted'
-require_text "${deploy_workflow}" 'index .Options "encrypted"'
 
 amiary_log=$(awk '/log_format amiary_json/{capture=1} capture{print} capture && /};/{exit}' "${common}")
 # shellcheck disable=SC2016

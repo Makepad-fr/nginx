@@ -40,11 +40,13 @@ jobs:
       MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK: test_amiary_canary
     steps:
       - name: Checkout
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check shell scripts
         run: shellcheck scripts/test-amiary-policy.sh
       - name: Validate Amiary privacy policy
         run: scripts/test-amiary-policy.sh
+      - name: Validate encrypted overlay rejection
+        run: python3 -m unittest discover -s tests -p test_amiary_networks.py
       - name: Render production stack
         run: >-
           docker compose

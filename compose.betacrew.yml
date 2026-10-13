@@ -1,0 +1,26 @@
+configs:
+  betacrew_prod_conf:
+    file: ${BETACREW_NGINX_TEMPLATE:-./sites/betacrew-prod.conf.template}
+
+services:
+  nginx:
+    environment:
+      BETACREW_PROD_SERVER_NAME: ${BETACREW_PROD_SERVER_NAME:-betacrew.app}
+      BETACREW_WWW_SERVER_NAME: ${BETACREW_WWW_SERVER_NAME:-www.betacrew.app}
+      BETACREW_PROD_UPSTREAM: ${BETACREW_PROD_UPSTREAM:-http://betacrew-prod-app:8080}
+      BETACREW_TLS_CERT_FILE: ${BETACREW_TLS_CERT_FILE:-/etc/letsencrypt-betacrew/live/betacrew.app/fullchain.pem}
+      BETACREW_TLS_KEY_FILE: ${BETACREW_TLS_KEY_FILE:-/etc/letsencrypt-betacrew/live/betacrew.app/privkey.pem}
+      BETACREW_ACME_WEBROOT: ${BETACREW_ACME_WEBROOT:-/var/lib/letsencrypt-betacrew}
+    configs:
+      - source: betacrew_prod_conf
+        target: /etc/nginx/templates/betacrew-prod.conf.template
+    networks:
+      - betacrew_prod_app
+    volumes:
+      - "${BETACREW_PROXY_LETSENCRYPT_HOST_PATH:-/srv/makepad/nginx/betacrew-letsencrypt}:/etc/letsencrypt-betacrew:ro"
+      - "${BETACREW_PROXY_ACME_WEBROOT_HOST_PATH:-/srv/makepad/nginx/betacrew-acme}:/var/lib/letsencrypt-betacrew:ro"
+
+networks:
+  betacrew_prod_app:
+    external: true
+    name: ${MAKEPAD_PROXY_BETACREW_APP_NETWORK:-makepad_betacrew_prod_app}

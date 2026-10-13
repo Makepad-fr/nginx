@@ -1,0 +1,12 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${BETACREW_PROD_SERVER_NAME} ${BETACREW_WWW_SERVER_NAME};
+
+    location /.well-known/acme-challenge/ {
+        root ${BETACREW_ACME_WEBROOT};
+        default_type text/plain;
+    }
+
+    location / { return 503; }
+}

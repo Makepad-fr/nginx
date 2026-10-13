@@ -51,4 +51,12 @@ def exercise(block, expected):
 baseline = re.sub(r"\s*proxy_(?:buffer_size|buffers|busy_buffers_size)\s+[^;]+;", "", location)
 exercise(baseline, 502)
 exercise(location, 200)
+# The current production overlay serves Walking Club separately from the legacy
+# catch-all template. Exercise its inherited proxy settings as well.
+production = (ROOT / "sites/vif-production.conf.template").read_text()
+settings = production.split("    proxy_http_version 1.1;", 1)[1].split("    # Exact public entry", 1)[0]
+production_location = "proxy_http_version 1.1;" + settings + "proxy_pass http://127.0.0.1:8081;"
+production_baseline = re.sub(r"\s*proxy_(?:buffer_size|buffers|busy_buffers_size)\s+[^;]+;", "", production_location)
+exercise(production_baseline, 502)
+exercise(production_location, 200)
 print("Default buffers reject the large response; VIF buffers preserve the full cookie and body.")

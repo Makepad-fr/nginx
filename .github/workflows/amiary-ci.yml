@@ -38,6 +38,8 @@ jobs:
       MAKEPAD_PROXY_RUNTRACE_APP_NETWORK: test_runtrace
       MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK: test_amiary_prod
       MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK: test_amiary_canary
+      MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK: test_makepad_proxy_brio_staging_app_network
+      MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK: test_makepad_proxy_maildev_brio_staging_web_network
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,4 +55,5 @@ jobs:
           --env-file envs/production/.env.proxy
           -f compose.yml
           -f envs/production/compose.yml
+          -f compose.amiary.yml
           config >/dev/null

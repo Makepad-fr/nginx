@@ -1,0 +1,57 @@
+limit_req_zone $binary_remote_addr zone=consent_scan:1m rate=12r/m;
+limit_req_zone $binary_remote_addr zone=consent_general:1m rate=10r/s;
+limit_conn_zone $binary_remote_addr zone=consent_connections:1m;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name consent.makepad.fr;
+    access_log /var/log/nginx/access.log runtrace_json;
+    location /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        default_type text/plain;
+    }
+    location / { return 301 https://consent.makepad.fr$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name consent.makepad.fr;
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    ssl_certificate /etc/letsencrypt/live/consent.makepad.fr/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/consent.makepad.fr/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    access_log /var/log/nginx/access.log runtrace_json;
+    client_max_body_size 4k;
+    client_body_timeout 10s;
+    limit_conn consent_connections 12;
+    limit_conn_status 429;
+    limit_req_status 429;
+    set $consent_upstream http://consent-lens-web:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host consent.makepad.fr;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For "";
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 75s;
+    proxy_send_timeout 15s;
+
+    location = /api/scan {
+        limit_req zone=consent_scan burst=3 nodelay;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_pass $consent_upstream;
+    }
+    location / {
+        limit_req zone=consent_general burst=30 nodelay;
+        proxy_pass $consent_upstream;
+    }
+}

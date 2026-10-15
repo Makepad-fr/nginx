@@ -38,6 +38,9 @@ server {
     limit_conn_status 429;
     limit_conn brio_staging_connections 30;
     proxy_http_version 1.1;
+    proxy_buffer_size 32k;
+    proxy_buffers 8 32k;
+    proxy_busy_buffers_size 64k;
     proxy_connect_timeout 5s;
     proxy_read_timeout 60s;
     proxy_send_timeout 60s;

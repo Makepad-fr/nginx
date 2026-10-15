@@ -1,0 +1,84 @@
+{
+  "configs": {
+    "backinmysize_prod_conf": {
+      "file": "./sites/backinmysize-prod.conf.template"
+    },
+    "scraping_admin_prod_conf": {
+      "file": "./sites/scraping-admin-prod.conf.template"
+    },
+    "vestiaire_prod_conf": {
+      "file": "./sites/vestiaire-prod.conf.template"
+    },
+    "vestiaire_logs_conf": {
+      "file": "./sites/vestiaire-logs.conf.template"
+    }
+  },
+  "services": {
+    "nginx": {
+      "environment": {
+        "BACKINMYSIZE_PROD_SERVER_NAME": "${BACKINMYSIZE_PROD_SERVER_NAME:-backinmysize.localhost}",
+        "BACKINMYSIZE_WWW_SERVER_NAME": "${BACKINMYSIZE_WWW_SERVER_NAME:-www.backinmysize.localhost}",
+        "BACKINMYSIZE_PROD_UPSTREAM": "${BACKINMYSIZE_PROD_UPSTREAM:-http://backinmysize-prod-app:8091}",
+        "SCRAPING_ADMIN_PROD_SERVER_NAME": "${SCRAPING_ADMIN_PROD_SERVER_NAME:-scraping.localhost}",
+        "SCRAPING_ADMIN_PROD_UPSTREAM": "${SCRAPING_ADMIN_PROD_UPSTREAM:-http://scraping-admin:8088}",
+        "VESTIAIRE_PROD_SERVER_NAME": "${VESTIAIRE_PROD_SERVER_NAME:-vestiaire.localhost}",
+        "VESTIAIRE_WEB_PROD_UPSTREAM": "${VESTIAIRE_WEB_PROD_UPSTREAM:-http://vestiaire-web:8080}",
+        "VESTIAIRE_CATALOG_API_PROD_UPSTREAM": "${VESTIAIRE_CATALOG_API_PROD_UPSTREAM:-http://vestiaire-catalog-api:8080}",
+        "VESTIAIRE_DEVELOPER_PLATFORM_PROD_UPSTREAM": "${VESTIAIRE_DEVELOPER_PLATFORM_PROD_UPSTREAM:-http://vestiaire-developer-platform:8080}",
+        "BACKINMYSIZE_TLS_CERT_FILE": "${BACKINMYSIZE_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}",
+        "BACKINMYSIZE_TLS_KEY_FILE": "${BACKINMYSIZE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}",
+        "SCRAPING_ADMIN_TLS_CERT_FILE": "${SCRAPING_ADMIN_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}",
+        "SCRAPING_ADMIN_TLS_KEY_FILE": "${SCRAPING_ADMIN_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}",
+        "VESTIAIRE_TLS_CERT_FILE": "${VESTIAIRE_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}",
+        "VESTIAIRE_TLS_KEY_FILE": "${VESTIAIRE_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}"
+      },
+      "configs": [
+        {
+          "source": "backinmysize_prod_conf",
+          "target": "/etc/nginx/templates/backinmysize-prod.conf.template"
+        },
+        {
+          "source": "scraping_admin_prod_conf",
+          "target": "/etc/nginx/templates/scraping-admin-prod.conf.template"
+        },
+        {
+          "source": "vestiaire_prod_conf",
+          "target": "/etc/nginx/templates/vestiaire-prod.conf.template"
+        },
+        {
+          "source": "vestiaire_logs_conf",
+          "target": "/etc/nginx/templates/vestiaire-logs.conf.template"
+        }
+      ],
+      "networks": [
+        "backinmysize_prod_app",
+        "scraping_admin_prod_app",
+        "vestiaire_web_prod_app",
+        "vestiaire_catalog_api_prod_app",
+        "vestiaire_developer_platform_prod_app"
+      ]
+    }
+  },
+  "networks": {
+    "backinmysize_prod_app": {
+      "external": true,
+      "name": "${MAKEPAD_PROXY_BACKINMYSIZE_APP_NETWORK:?set MAKEPAD_PROXY_BACKINMYSIZE_APP_NETWORK}"
+    },
+    "scraping_admin_prod_app": {
+      "external": true,
+      "name": "${MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK:?set MAKEPAD_PROXY_SCRAPING_ADMIN_APP_NETWORK}"
+    },
+    "vestiaire_web_prod_app": {
+      "external": true,
+      "name": "${MAKEPAD_PROXY_VESTIAIRE_WEB_APP_NETWORK:?set MAKEPAD_PROXY_VESTIAIRE_WEB_APP_NETWORK}"
+    },
+    "vestiaire_catalog_api_prod_app": {
+      "external": true,
+      "name": "${MAKEPAD_PROXY_VESTIAIRE_CATALOG_API_APP_NETWORK:?set MAKEPAD_PROXY_VESTIAIRE_CATALOG_API_APP_NETWORK}"
+    },
+    "vestiaire_developer_platform_prod_app": {
+      "external": true,
+      "name": "${MAKEPAD_PROXY_VESTIAIRE_DEVELOPER_PLATFORM_APP_NETWORK:?set MAKEPAD_PROXY_VESTIAIRE_DEVELOPER_PLATFORM_APP_NETWORK}"
+    }
+  }
+}

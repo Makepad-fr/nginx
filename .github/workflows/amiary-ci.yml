@@ -1,0 +1,59 @@
+name: Amiary proxy CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/amiary-ci.yml"
+      - ".github/workflows/manual-deploy.yml"
+      - "compose.yml"
+      - "envs/production/.env.proxy"
+      - "envs/production/compose.yml"
+      - "sites/00-common.conf.template"
+      - "sites/amiary-*.conf*"
+      - "scripts/test-amiary-policy.sh"
+      - "README.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amiary-proxy-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy-and-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      MAKEPAD_PROXY_PROD_APP_NETWORK: test_prod
+      MAKEPAD_PROXY_CANARY_APP_NETWORK: test_canary
+      MAKEPAD_PROXY_ALERTECONSO_APP_NETWORK: test_alerteconso
+      MAKEPAD_PROXY_LE_PETIT_COIN_APP_NETWORK: test_le_petit_coin
+      MAKEPAD_PROXY_VIF_APP_NETWORK: test_vif
+      MAKEPAD_PROXY_MAKEPAD_LANDING_APP_NETWORK: test_makepad_landing
+      MAKEPAD_PROXY_EVIDELLA_APP_NETWORK: test_evidella
+      MAKEPAD_PROXY_OPENPANEL_APP_NETWORK: test_openpanel
+      MAKEPAD_PROXY_RUNTRACE_APP_NETWORK: test_runtrace
+      MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK: test_amiary_prod
+      MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK: test_amiary_canary
+      MAKEPAD_PROXY_BRIO_STAGING_APP_NETWORK: test_makepad_proxy_brio_staging_app_network
+      MAKEPAD_PROXY_MAILDEV_BRIO_STAGING_WEB_NETWORK: test_makepad_proxy_maildev_brio_staging_web_network
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check shell scripts
+        run: shellcheck scripts/test-amiary-policy.sh
+      - name: Validate Amiary privacy policy
+        run: scripts/test-amiary-policy.sh
+      - name: Validate encrypted overlay rejection
+        run: python3 -m unittest discover -s tests -p test_amiary_networks.py
+      - name: Render production stack
+        run: >-
+          docker compose
+          --env-file envs/production/.env.proxy
+          -f compose.yml
+          -f envs/production/compose.yml
+          -f compose.amiary.yml
+          config >/dev/null

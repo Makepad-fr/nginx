@@ -449,3 +449,7 @@ return 404; client-supplied forwarding headers are overwritten, and root landing
 requests strip cookies and Authorization. Production has no blanket `noindex`.
 Keep staging and all unrelated live service specifications unchanged during the
 configuration-preserving rollout; capture the prior config and networks for rollback.
+
+## Optional Fashion routing overlay
+
+`compose.fashion.yml` adds BackInMySize, the Scraping administration endpoint and Vestiaire routes. It is excluded from the default deployment. Provision the exact certificate files and external application networks, render and test the complete candidate, and preserve the live ingress inventory before selecting the overlay. Existing OpenPanel, Runtrace, Visitaki and Brio routes retain their current definitions.

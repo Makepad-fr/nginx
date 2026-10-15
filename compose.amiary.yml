@@ -1,0 +1,62 @@
+{
+  "configs": {
+    "amiary_prod_conf": {
+      "file": "./sites/amiary-prod.conf.template"
+    },
+    "amiary_canary_conf": {
+      "file": "./sites/amiary-canary.conf.template"
+    },
+    "amiary_logs_conf": {
+      "file": "./sites/amiary-logs.conf.template"
+    },
+    "amiary_common_proxy": {
+      "file": "./sites/amiary-common-proxy.conf"
+    }
+  },
+  "services": {
+    "nginx": {
+      "environment": {
+        "AMIARY_PROD_SERVER_NAME": "${AMIARY_PROD_SERVER_NAME:-amiary.localhost}",
+        "AMIARY_CANARY_SERVER_NAME": "${AMIARY_CANARY_SERVER_NAME:-canary.amiary.localhost}",
+        "AMIARY_PROD_UPSTREAM": "${AMIARY_PROD_UPSTREAM:-http://amiary-prod-app:8080}",
+        "AMIARY_CANARY_UPSTREAM": "${AMIARY_CANARY_UPSTREAM:-http://amiary-canary-app:8080}",
+        "AMIARY_PROD_TLS_CERT_FILE": "${AMIARY_PROD_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}",
+        "AMIARY_PROD_TLS_KEY_FILE": "${AMIARY_PROD_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}",
+        "AMIARY_CANARY_TLS_CERT_FILE": "${AMIARY_CANARY_TLS_CERT_FILE:-/etc/letsencrypt/live/localhost/fullchain.pem}",
+        "AMIARY_CANARY_TLS_KEY_FILE": "${AMIARY_CANARY_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}"
+      },
+      "configs": [
+        {
+          "source": "amiary_prod_conf",
+          "target": "/etc/nginx/templates/amiary-prod.conf.template"
+        },
+        {
+          "source": "amiary_canary_conf",
+          "target": "/etc/nginx/templates/amiary-canary.conf.template"
+        },
+        {
+          "source": "amiary_logs_conf",
+          "target": "/etc/nginx/templates/amiary-logs.conf.template"
+        },
+        {
+          "source": "amiary_common_proxy",
+          "target": "/etc/nginx/snippets/amiary-common-proxy.conf"
+        }
+      ],
+      "networks": [
+        "amiary_prod_app",
+        "amiary_canary_app"
+      ]
+    }
+  },
+  "networks": {
+    "amiary_prod_app": {
+      "external": true,
+      "name": "${MAKEPAD_PROXY_AMIARY_PROD_APP_NETWORK:?set reviewed encrypted Amiary network}"
+    },
+    "amiary_canary_app": {
+      "external": true,
+      "name": "${MAKEPAD_PROXY_AMIARY_CANARY_APP_NETWORK:?set reviewed encrypted Amiary network}"
+    }
+  }
+}

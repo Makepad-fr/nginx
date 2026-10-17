@@ -8,6 +8,7 @@ server {
 }
 server {
     listen 443 ssl;
+    if ($edge_sni_host_match = 0) { return 421; }
     http2 on;
     server_name sentry.makepad.fr;
     access_log /var/log/nginx/access.log runtrace_json;

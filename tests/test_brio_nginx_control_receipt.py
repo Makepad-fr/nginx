@@ -154,6 +154,18 @@ class BrioNginxControlReceiptTests(unittest.TestCase):
             self.service, self.container, self.brio, self.maildev, self.certificates, self.responses, self.common
         )
 
+    def test_exact_pre_guard_pair_remains_valid_during_rollout(self):
+        guard = "    if ($edge_sni_host_match = 0) { return 421; }\n"
+        self.brio = self.brio.replace(guard, "")
+        self.maildev = self.maildev.replace(guard, "")
+        self.assertEqual(self.receipt()["schema"], MODULE.SCHEMA)
+
+    def test_mixed_pre_guard_and_guarded_routes_fail_closed(self):
+        guard = "    if ($edge_sni_host_match = 0) { return 421; }\n"
+        self.brio = self.brio.replace(guard, "")
+        with self.assertRaisesRegex(MODULE.ReceiptError, "route policy drifted"):
+            self.receipt()
+
     def test_changed_admission_zone_is_rejected(self):
         self.common = self.common.replace("15r/s", "150r/s")
         with self.assertRaisesRegex(MODULE.ReceiptError, "admission-zone"):

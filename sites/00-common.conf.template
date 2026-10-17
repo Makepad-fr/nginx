@@ -17,6 +17,14 @@ server {
     return 421;
 }
 
+# $host prefers an absolute-form request target over the literal Host field.
+# Both authorities must agree with SNI, including an optional default TLS port;
+# otherwise one tenant's route can accept another tenant's Host header.
+map "$ssl_server_name:$host:$http_host" $edge_sni_host_match {
+    default 0;
+    ~*^([^:]+):\1:\1(?::443)?$ 1;
+}
+
 map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;

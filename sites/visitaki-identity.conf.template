@@ -9,6 +9,7 @@ server {
 }
 server {
     listen 443 ssl;
+    if ($edge_sni_host_match = 0) { return 421; }
     server_name auth.visitaki.com;
     ssl_certificate /etc/letsencrypt/live/auth.visitaki.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/auth.visitaki.com/privkey.pem;

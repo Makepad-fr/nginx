@@ -87,6 +87,7 @@ docker run --rm --network none \
   -e AMIARY_CANARY_TLS_KEY_FILE=/run/amiary-test/server.key \
   -e CATWLK_ACME_WEBROOT=/var/lib/letsencrypt \
   -v "${common}:/etc/nginx/templates/00-common.conf.template:ro" \
+  -v "${repo_root}/sites/00-common.conf.template:/etc/nginx/templates/00-edge-common.conf.template:ro" \
   -v "${prod}:/etc/nginx/templates/amiary-prod.conf.template:ro" \
   -v "${canary}:/etc/nginx/templates/amiary-canary.conf.template:ro" \
   -v "${common_proxy}:/etc/nginx/snippets/amiary-common-proxy.conf:ro" \

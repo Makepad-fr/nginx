@@ -14,7 +14,7 @@ cp "$fixture/etc/letsencrypt/live/staging.vif.io/"*.pem "$fixture/etc/letsencryp
 python3 - "$fixture/nginx.conf" <<'PY'
 from pathlib import Path
 import sys
-common=Path('sites/00-common.conf.template').read_text().split('# Brio logs',1)[1]
+common=Path('sites/00-common.conf.template').read_text()
 route=Path('sites/vif-staging.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081').replace('http://vif-platform-staging-app:8080','http://127.0.0.1:8082').replace('http://vif-landing-app:8080','http://127.0.0.1:8084').replace('http://10.80.0.2:9000','http://127.0.0.1:8083')
 route+='\n'+Path('sites/brio-vif-redirects.conf.template').read_text().replace('http://brio-staging-app:8080','http://127.0.0.1:8081')
 assert 'vif-staging.conf.template' not in Path('compose.yml').read_text()
@@ -22,9 +22,11 @@ stubs=''
 for port, name in [(8081,'community'),(8082,'platform'),(8083,'objects'),(8084,'landing')]:
  cache='private, no-store' if name=='community' else 'public, max-age=3600'
  stubs+='server { listen '+str(port)+'; add_header Cache-Control "'+cache+'" always; add_header X-Fixture-Method $request_method always; add_header X-Fixture-Stripe $http_stripe_signature always; add_header X-Fixture-Tally $http_tally_signature always; add_header X-Fixture-Cookie $http_cookie always; add_header X-Fixture-Authorization $http_authorization always; location / { return 200 "'+name+'|$request_uri|$http_host|$http_x_forwarded_host|$http_forwarded|$http_x_forwarded_for|$http_x_real_ip"; } }\n'
-Path(sys.argv[1]).write_text('events {}\nhttp {\n# Brio logs'+common+'\n'+route+'\n'+stubs+'\n}\n')
+Path(sys.argv[1]).write_text('events {}\nhttp {\n'+common+'\n'+route+'\n'+stubs+'\n}\n')
 PY
-container=$(docker create --network none --entrypoint nginx \
+container=$(docker create --network none \
+ --add-host staging.vif.io:127.0.0.1 --add-host brio-staging.makepad.fr:127.0.0.1 \
+ --entrypoint nginx \
  nginx:1.30-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 \
  -c /tmp/nginx.conf -g 'daemon off;')
 docker cp "$fixture/etc/letsencrypt" "$container:/etc/letsencrypt" >/dev/null
@@ -34,7 +36,8 @@ python3 - "$container" <<'PY'
 import subprocess,sys,time
 container=sys.argv[1]
 def request(path,host='staging.vif.io',extra=()):
- r=subprocess.run(['docker','exec',container,'wget','-T','5','-S','-O','-','--no-check-certificate','--header','Host: '+host,'--header','X-Forwarded-Host: evil.example','--header','Forwarded: host=evil.example','--header','X-Forwarded-For: 203.0.113.8','--header','X-Real-IP: 203.0.113.9',*extra,'https://127.0.0.1'+path],capture_output=True,text=True,timeout=15)
+ sni=host if host in ('staging.vif.io','brio-staging.makepad.fr') else 'staging.vif.io'
+ r=subprocess.run(['docker','exec',container,'wget','-T','5','-S','-O','-','--no-check-certificate','--header','Host: '+host,'--header','X-Forwarded-Host: evil.example','--header','Forwarded: host=evil.example','--header','X-Forwarded-For: 203.0.113.8','--header','X-Real-IP: 203.0.113.9',*extra,'https://'+sni+path],capture_output=True,text=True,timeout=15)
  return r.stdout,r.stderr
 def assert_staging_cache(headers):
  values=[line.strip().split(':',1)[1].strip() for line in headers.splitlines() if line.strip().lower().startswith('cache-control:')]

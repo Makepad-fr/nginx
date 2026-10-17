@@ -462,10 +462,12 @@ agree, so an absolute-form request cannot hide a conflicting Host header. A
 disposable container uses the running image, network namespace, and verified
 read-only certificate/ACME mounts for `nginx -t`; candidate files stay on a
 verified `/dev/shm` tmpfs and environment values stay in a memory-only file
-descriptor. The command emits counts and hashes, never configuration bodies or
-Docker diagnostics. It neither
-creates Docker Configs nor updates the service. A changed inventory, failed
-render, or concurrent service update invalidates the result.
+descriptor. Raw and rendered configs must have no includes outside `location`
+blocks, where an included file cannot add a TLS vhost; unexpected include
+placement requires manual review. The command emits counts and hashes, never
+configuration bodies or Docker diagnostics. It neither creates Docker Configs
+nor updates the service. A changed inventory, failed render, or concurrent
+service update invalidates the result.
 
 Passing this preflight is **not a deployment receipt**. The actual 28-config
 update, preservation of all 27 networks, rollback, and public positive/negative

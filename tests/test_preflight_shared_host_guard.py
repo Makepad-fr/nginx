@@ -115,6 +115,60 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(len(preflight.server_blocks(transformed.decode())), 1)
         self.assertEqual(transformed.count(preflight.GUARD.encode()), 1)
 
+    def test_raw_includes_must_be_location_scoped(self):
+        configs, networks = live_fixture()
+        target = '/etc/nginx/templates/tenant-00.conf.template'
+        for extra in (
+            b'include /etc/letsencrypt/extra.conf;\n',
+            b'include\n /etc/letsencrypt/extra.conf;\n',
+        ):
+            changed = dict(configs)
+            changed[target] = extra + configs[target]
+            with self.subTest(scope='http', extra=extra), self.assertRaises(preflight.PreflightError):
+                preflight.build_candidate(changed, networks)
+
+        changed = dict(configs)
+        changed[target] = configs[target].replace(
+            b'    listen 80;\n',
+            b'    listen 80;\n    include /etc/letsencrypt/extra.conf;\n', 1,
+        )
+        with self.assertRaises(preflight.PreflightError):
+            preflight.build_candidate(changed, networks)
+
+        changed = dict(configs)
+        changed[preflight.COMMON_TARGET] += b'include /etc/letsencrypt/extra.conf;\n'
+        with self.assertRaises(preflight.PreflightError):
+            preflight.build_candidate(changed, networks)
+
+        changed = dict(configs)
+        changed[target] = configs[target].replace(
+            b'    location / { proxy_pass ${UPSTREAM}; }',
+            b'    location / { include /etc/nginx/snippets/amiary-common-proxy.conf; '
+            b'proxy_pass ${UPSTREAM}; }',
+        )
+        candidate, files, vhosts = preflight.build_candidate(changed, networks)
+        self.assertEqual((files, vhosts), (25, 29))
+        self.assertIn(b'amiary-common-proxy.conf;', candidate[target])
+        for name in ('amiary-prod.conf.template', 'amiary-canary.conf.template'):
+            with self.subTest(template=name):
+                source = (SCRIPT.parents[1] / 'sites' / name).read_text()
+                preflight.reject_vhost_includes(source)
+
+    def test_include_words_in_comments_quotes_or_variables_are_not_directives(self):
+        source = (
+            '# include /etc/letsencrypt/ignored.conf;\n'
+            'server {\n'
+            '    listen 443 ssl;\n'
+            '    server_name tenant.test;\n'
+            '    add_header Test "include /etc/letsencrypt/ignored.conf; { }";\n'
+            '    location ~ "^/path{2}$" {\n'
+            '        proxy_pass ${UPSTREAM};\n'
+            '        include /etc/nginx/snippets/amiary-common-proxy.conf;\n'
+            '    }\n'
+            '}\n'
+        )
+        preflight.reject_vhost_includes(source)
+
     def test_unreviewed_target_and_duplicate_rendered_name_refuse(self):
         with self.assertRaises(preflight.PreflightError):
             preflight.target_output('/etc/nginx/templates/../../secrets')
@@ -265,6 +319,33 @@ class CandidateTests(unittest.TestCase):
                 preflight.syntax_preflight(candidate, 'active-fixture', container,
                                           'nginx:fixture', mounts)
         self.assertEqual(next(args for args, _ in calls if args[0] == 'rm')[1:], ('--force', 'abc123'))
+
+        injected = dict(candidate)
+        target = '/etc/nginx/templates/tenant-00.conf.template'
+        injected[target] = b'${EXTRA}\n' + injected[target]
+        preflight.reject_vhost_includes(preflight.decode_config(injected[target]))
+
+        def fake_rendered_injection(*args, **kwargs):
+            if args[0] == 'run':
+                conf_mount = next(args[index + 1] for index, value in enumerate(args)
+                                  if value == '--mount' and 'dst=/etc/nginx/conf.d' in args[index + 1])
+                conf = Path(conf_mount.split('src=', 1)[1].split(',dst=', 1)[0])
+                for name, raw in injected.items():
+                    rendered = raw.replace(b'${EXTRA}', b'include /etc/letsencrypt/extra.conf;')
+                    (conf / Path(name).name.removesuffix('.template')).write_bytes(rendered)
+                return b''
+            if args[0] == 'ps':
+                return b''
+            raise AssertionError(args)
+
+        with tempfile.TemporaryFile() as env_file:
+            with (patch.object(preflight, 'candidate_tmpfs_root', return_value=Path(tempfile.gettempdir())),
+                  patch.object(preflight.os, 'memfd_create', create=True,
+                               side_effect=lambda *args, **kwargs: os.dup(env_file.fileno())),
+                  patch.object(preflight, 'docker', side_effect=fake_rendered_injection),
+                  self.assertRaisesRegex(preflight.PreflightError, 'include outside a location')):
+                preflight.syntax_preflight(injected, 'active-fixture', container,
+                                          'nginx:fixture', mounts)
 
     def test_docker_timeout_is_redacted(self):
         with (patch.object(preflight.subprocess, 'run',

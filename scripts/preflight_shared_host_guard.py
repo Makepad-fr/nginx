@@ -83,6 +83,62 @@ def decode_config(raw):
         raise PreflightError('Non-UTF-8 configuration; bytes withheld') from None
 
 
+def reject_vhost_includes(source):
+    """Location-scoped includes cannot add TLS listeners or server blocks."""
+    blocks = []
+    directive = []
+    quote = None
+    comment = False
+    index = 0
+    while index < len(source):
+        char = source[index]
+        if comment:
+            if char == '\n':
+                comment = False
+                directive.append(' ')
+            index += 1
+            continue
+        if char == '\\' and index + 1 < len(source):
+            directive.append(source[index + 1])
+            index += 2
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+            else:
+                directive.append(char)
+        elif char == '#':
+            comment = True
+        elif char in ('"', "'"):
+            quote = char
+        elif char == '$' and source[index:index + 2] == '${':
+            end = source.find('}', index + 2)
+            if end < 0 or '\n' in source[index:end]:
+                raise PreflightError('Unparseable nginx variable expansion')
+            directive.append('VARIABLE')
+            index = end + 1
+            continue
+        elif char == '{':
+            name = ''.join(directive).strip()
+            blocks.append('location' if re.match(r'^location(?:\s|$)', name) else 'other')
+            directive.clear()
+        elif char == ';':
+            name = ''.join(directive).strip()
+            if re.match(r'^include(?:\s|$)', name) and 'location' not in blocks:
+                raise PreflightError('Unreviewed include outside a location block')
+            directive.clear()
+        elif char == '}':
+            if not blocks:
+                raise PreflightError('Unbalanced nginx configuration')
+            blocks.pop()
+            directive.clear()
+        else:
+            directive.append(char)
+        index += 1
+    if quote or blocks or ''.join(directive).strip():
+        raise PreflightError('Unbalanced nginx configuration')
+
+
 def server_blocks(source):
     """Find top-level server blocks without interpreting quoted/comment braces."""
     blocks = []
@@ -185,10 +241,11 @@ def build_candidate(configs, networks):
     if len({canonical_sha(item) for item in networks}) != len(networks):
         raise PreflightError('Duplicate live network attachment')
     generated_names = set()
-    for target in configs:
+    for target, raw in configs.items():
         directory, filename = target_output(target)
         if directory != 'templates':
             raise PreflightError('A live direct conf.d attachment needs manual review')
+        reject_vhost_includes(decode_config(raw))
         rendered = filename.removesuffix('.template') if directory == 'templates' else filename
         if rendered in generated_names:
             raise PreflightError('Two live configs would render to the same file')
@@ -395,6 +452,7 @@ def syntax_preflight(candidate, active_id, container, image, mounts):
         default_rejects = 0
         for path in conf.iterdir():
             rendered = decode_config(path.read_bytes())
+            reject_vhost_includes(rendered)
             for opening, closing in server_blocks(rendered):
                 body = rendered[opening + 1:closing]
                 if not TLS_LISTEN.search(body):

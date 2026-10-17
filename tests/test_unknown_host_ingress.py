@@ -4,6 +4,7 @@ import http.client
 import json
 import pathlib
 import re
+import shutil
 import socket
 import ssl
 import subprocess
@@ -88,11 +89,11 @@ class UnknownHostIngressTest(unittest.TestCase):
                 tls.check_hostname = False
                 tls.verify_mode = ssl.CERT_NONE
 
-                def response(sni, host):
+                def response(sni, host, target='/'):
                     with socket.create_connection(("127.0.0.1", port), timeout=3) as peer:
                         with tls.wrap_socket(peer, server_hostname=sni) as connection:
                             connection.sendall(
-                                f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n".encode()
+                                f"GET {target} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n".encode()
                             )
                             return b"".join(iter(lambda: connection.recv(4096), b""))
 
@@ -101,6 +102,30 @@ class UnknownHostIngressTest(unittest.TestCase):
                 self.assertIn(b" 308 ", response("www.visitaki.com", "www.visitaki.com"))
                 self.assertIn(b" 421 ", response("visitaki.com", "airloom.makepad.fr"))
                 self.assertIn(b" 421 ", response("airloom.makepad.fr", "visitaki.com"))
+                self.assertIn(b" 421 ", response("visitaki.com", "airloom.makepad.fr", "http://visitaki.com/"))
+                self.assertIn(b" 421 ", response("visitaki.com", "visitaki.com", "http://airloom.makepad.fr/"))
+                self.assertIn(b" 421 ", response("airloom.makepad.fr", "visitaki.com", "http://airloom.makepad.fr/"))
+                self.assertIn(b" 421 ", response("airloom.makepad.fr", "airloom.makepad.fr", "http://visitaki.com/"))
+                self.assertIn(b" 200 ", response("visitaki.com", "visitaki.com:443", "http://visitaki.com/"))
+                self.assertIn(b" 200 ", response("visitaki.com", "ViSiTaKi.CoM:443", "http://VISITAKI.COM/"))
+                self.assertIn(b" 308 ", response("www.visitaki.com", "WWW.VISITAKI.COM:443",
+                                                  "http://www.visitaki.com/"))
+                self.assertIn(b" 421 ", response("visitaki.com", "visitaki.com:8443", "http://visitaki.com/"))
+                # Nginx reconstructs Host from HTTP/2 :authority; the stricter
+                # literal-header guard must not reject ordinary h2 clients.
+                curl = (subprocess.run(["curl", "--version"], capture_output=True, text=True)
+                        if shutil.which("curl") else None)
+                if curl and curl.returncode == 0 and "HTTP2" in curl.stdout:
+                    h2 = subprocess.run(
+                        ["curl", "--http2", "--insecure", "--noproxy", "*", "--silent",
+                         "--show-error", "--max-time", "5", "--connect-to",
+                         f"airloom.makepad.fr:443:127.0.0.1:{port}", "--output", "/dev/null",
+                         "--write-out", "%{http_code} %{http_version}",
+                         "https://airloom.makepad.fr/"],
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    self.assertEqual(h2.returncode, 0, h2.stderr)
+                    self.assertEqual(h2.stdout, "200 2")
             finally:
                 subprocess.run(["docker", "rm", "--force", container], capture_output=True, timeout=30)
 

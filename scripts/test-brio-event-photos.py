@@ -34,7 +34,10 @@ server { listen 8082; client_max_body_size 20m; add_header X-Fixture-Host $host 
   def request(path,method='GET',data=None,headers=None):
    conn=TenantConnection('brio-staging.localhost',int(port),context=context,timeout=15)
    try:
-    conn.request(method,path,body=data,headers=headers or {})
+    request_headers=dict(headers or {})
+    if not any(key.lower()=='host' for key in request_headers):
+     request_headers['Host']='brio-staging.localhost'
+    conn.request(method,path,body=data,headers=request_headers)
     res=conn.getresponse()
     return res.status,res.headers,res.read()
    finally: conn.close()

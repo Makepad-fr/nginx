@@ -456,11 +456,14 @@ live service version and image digest as `--expected-service-version` and
 drifted and application-owned routes, and requires the reviewed 27 networks,
 25 TLS config files, and 29 tenant TLS vhosts. It adds the rejecting defaults
 and SNI/Host guards only in a temporary candidate, leaving the exact live Brio
-common zones and all tenant route bytes intact. A disposable container uses
-the running image, network namespace, and read-only mounts for `nginx -t`;
-candidate files stay on `/dev/shm` and environment values stay in a memory-only
-file descriptor. The command emits
-counts and hashes, never configuration bodies or Docker diagnostics. It neither
+common zones and tenant routes intact apart from the guard insertion. The guard
+requires SNI, the request-target authority, and the literal Host authority to
+agree, so an absolute-form request cannot hide a conflicting Host header. A
+disposable container uses the running image, network namespace, and verified
+read-only certificate/ACME mounts for `nginx -t`; candidate files stay on a
+verified `/dev/shm` tmpfs and environment values stay in a memory-only file
+descriptor. The command emits counts and hashes, never configuration bodies or
+Docker diagnostics. It neither
 creates Docker Configs nor updates the service. A changed inventory, failed
 render, or concurrent service update invalidates the result.
 

@@ -17,6 +17,13 @@ server {
     return 421;
 }
 
+# Host is normalized by Nginx; match it to the TLS SNI without treating DNS
+# letter case as a different tenant. Every tenant TLS server checks this map.
+map "$ssl_server_name:$host" $edge_sni_host_match {
+    default 0;
+    ~*^([^:]+):\1$ 1;
+}
+
 map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;

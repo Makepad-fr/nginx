@@ -10,8 +10,8 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=visitaki.com' \
   -keyout "$fixture/etc/letsencrypt/live/visitaki.com/privkey.pem" \
   -out "$fixture/etc/letsencrypt/live/visitaki.com/fullchain.pem" >/dev/null 2>&1
 cp -R "$fixture/etc/letsencrypt/live/visitaki.com" "$fixture/etc/letsencrypt/live/auth.visitaki.com"
-{ printf 'events {}\nhttp {\n'; cat sites/visitaki-preview.conf.template sites/visitaki-identity.conf.template; printf '\n}\n'; } > "$fixture/nginx.conf"
-container=$(docker create --network none --entrypoint nginx \
+{ printf 'events {}\nhttp {\n'; cat sites/00-common.conf.template sites/visitaki-preview.conf.template sites/visitaki-identity.conf.template; printf '\n}\n'; } > "$fixture/nginx.conf"
+container=$(docker create --network none --add-host auth.visitaki.com:127.0.0.1 --entrypoint nginx \
  nginx:1.30-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 \
  -t -c /tmp/nginx.conf)
 docker cp "$fixture/etc/letsencrypt" "$container:/etc/letsencrypt" >/dev/null
@@ -39,7 +39,7 @@ s = p.read_text().replace('http://keycloak-visitaki:8080', 'http://127.0.0.1:808
 stub = 'server { listen 8080; location / { return 200 "identity fixture"; } }'
 p.write_text(s.replace('http {', 'http {\n' + stub, 1))
 PY
-container=$(docker create --network none --entrypoint nginx \
+container=$(docker create --network none --add-host auth.visitaki.com:127.0.0.1 --entrypoint nginx \
  nginx:1.30-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46 \
  -c /tmp/nginx.conf -g 'daemon off;')
 docker cp "$fixture/etc/letsencrypt" "$container:/etc/letsencrypt" >/dev/null
@@ -51,7 +51,7 @@ container = sys.argv[1]
 def status(path):
     result = subprocess.run(['docker', 'exec', container, 'wget', '-T', '5', '-S', '-O', '/dev/null',
         '--no-check-certificate', '--header', 'Host: auth.visitaki.com',
-        'https://127.0.0.1' + path], capture_output=True, text=True, timeout=15)
+        'https://auth.visitaki.com' + path], capture_output=True, text=True, timeout=15)
     return result.stderr
 for attempt in range(30):
     if '200 OK' in status('/realms/visitaki/.well-known/openid-configuration'):

@@ -24,6 +24,8 @@ MAILDEV_UPSTREAM = "http://maildev-brio-staging:1080"
 MAILDEV_AUTH_UPSTREAM = "http://maildev-brio-staging-auth:4180"
 BRIO_CONFIG_SHA256 = "369f3d502167da5e6eb8721001cef04f81687df7e0b37ae8651d0a86d9b23c71"
 MAILDEV_CONFIG_SHA256 = "714e46ebd9e48d573a25fb983ad6fe518ad8f802b664cb2d189d2913cc056379"
+BRIO_SNI_HOST_GUARD_SHA256 = "147dae8335de2d741f78a50e64f5c70162a8c03c8f56aea6b164144c86a8f3a2"
+MAILDEV_SNI_HOST_GUARD_SHA256 = "881f99782573661c1faca98edd0d46776b3a5ca6f0907a275c8196ade482c010"
 COMMON_CONFIG_SHA256 = "308fe0d9f6424f51e386626ace48e49c1b47c88c60fee38dd60265d2a3e00e55"
 MAX_OUTPUT_BYTES = 512 * 1024
 APPLICATION_CSP = "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://auth-brio-staging.makepad.fr https://checkout.stripe.com https://billing.stripe.com; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'"
@@ -150,7 +152,12 @@ def validate_rendered_configs(brio: str, maildev: str) -> dict[str, str]:
         "application": hashlib.sha256(brio.encode("utf-8")).hexdigest(),
         "mailCapture": hashlib.sha256(maildev.encode("utf-8")).hexdigest(),
     }
-    require(digests == {"application": BRIO_CONFIG_SHA256, "mailCapture": MAILDEV_CONFIG_SHA256},
+    # Accept only the exact old pair and the exact guarded pair during rollout.
+    # A mixed or unexpected route is still a fail-closed policy drift.
+    require(digests in (
+        {"application": BRIO_CONFIG_SHA256, "mailCapture": MAILDEV_CONFIG_SHA256},
+        {"application": BRIO_SNI_HOST_GUARD_SHA256, "mailCapture": MAILDEV_SNI_HOST_GUARD_SHA256},
+    ),
             "Rendered Brio Nginx route policy drifted")
     for value in (BRIO_HOST, BRIO_UPSTREAM, "location = /applications", "location / {"):
         require(value in brio, "Rendered Brio application route is incomplete")

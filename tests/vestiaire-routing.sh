@@ -97,14 +97,21 @@ VESTIAIRE_TEST_PORT=${test_port} python3 - <<'PY'
 import http.client
 import json
 import os
+import socket
 import ssl
 
 context = ssl._create_unverified_context()
 
 
+class LoopbackHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        peer = socket.create_connection(("127.0.0.1", self.port), self.timeout)
+        self.sock = self._context.wrap_socket(peer, server_hostname=self.host)
+
+
 def request(path, accept):
-    connection = http.client.HTTPSConnection(
-        "127.0.0.1",
+    connection = LoopbackHTTPSConnection(
+        "vestiaire.localhost",
         int(os.environ["VESTIAIRE_TEST_PORT"]),
         context=context,
         timeout=10,
@@ -195,12 +202,19 @@ VESTIAIRE_TEST_PORT=${test_port} python3 - <<'PY'
 import http.client
 import json
 import os
+import socket
 import ssl
 
 
+class LoopbackHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        peer = socket.create_connection(("127.0.0.1", self.port), self.timeout)
+        self.sock = self._context.wrap_socket(peer, server_hostname=self.host)
+
+
 def request(path, accept):
-    connection = http.client.HTTPSConnection(
-        "127.0.0.1",
+    connection = LoopbackHTTPSConnection(
+        "vestiaire.localhost",
         int(os.environ["VESTIAIRE_TEST_PORT"]),
         context=ssl._create_unverified_context(),
         timeout=10,
@@ -238,14 +252,21 @@ VESTIAIRE_TEST_PORT=${test_port} python3 - <<'PY'
 import http.client
 import json
 import os
+import socket
 import ssl
 
 context = ssl._create_unverified_context()
 
 
+class LoopbackHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        peer = socket.create_connection(("127.0.0.1", self.port), self.timeout)
+        self.sock = self._context.wrap_socket(peer, server_hostname=self.host)
+
+
 def request(path, accept):
-    connection = http.client.HTTPSConnection(
-        "127.0.0.1",
+    connection = LoopbackHTTPSConnection(
+        "vestiaire.localhost",
         int(os.environ["VESTIAIRE_TEST_PORT"]),
         context=context,
         timeout=10,
@@ -282,10 +303,17 @@ VESTIAIRE_TEST_PORT=${test_port} python3 - <<'PY'
 import http.client
 import json
 import os
+import socket
 import ssl
 
-connection = http.client.HTTPSConnection(
-    "127.0.0.1",
+class LoopbackHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        peer = socket.create_connection(("127.0.0.1", self.port), self.timeout)
+        self.sock = self._context.wrap_socket(peer, server_hostname=self.host)
+
+
+connection = LoopbackHTTPSConnection(
+    "vestiaire.localhost",
     int(os.environ["VESTIAIRE_TEST_PORT"]),
     context=ssl._create_unverified_context(),
     timeout=10,

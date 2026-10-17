@@ -447,6 +447,27 @@ for an image-only release. Swarm owns health-failure rollback; if the helper
 fails, inspect its update/rollback state and restore service before another
 release. Never issue a second blind rollback after automatic recovery.
 
+### Shared proxy host-guard preflight (no rollout)
+
+`scripts/preflight_shared_host_guard.py` is a dry-run gate for the existing
+single-replica edge. On the application host, pass the independently reviewed
+live service version and image digest as `--expected-service-version` and
+`--expected-image`. It reads all 27 attached Docker Config bodies, including
+drifted and application-owned routes, and requires the reviewed 27 networks,
+25 TLS config files, and 29 tenant TLS vhosts. It adds the rejecting defaults
+and SNI/Host guards only in a temporary candidate, leaving the exact live Brio
+common zones and all tenant route bytes intact. A disposable container uses
+the running image, network namespace, and read-only mounts for `nginx -t`;
+candidate files stay on `/dev/shm` and environment values stay in a memory-only
+file descriptor. The command emits
+counts and hashes, never configuration bodies or Docker diagnostics. It neither
+creates Docker Configs nor updates the service. A changed inventory, failed
+render, or concurrent service update invalidates the result.
+
+Passing this preflight is **not a deployment receipt**. The actual 28-config
+update, preservation of all 27 networks, rollback, and public positive/negative
+Host/SNI smoke tests need a separately reviewed rollout and explicit approval.
+
 Vif production activation uses `envs/production/vif-production.compose.yml` after
 reviewed app, platform and landing readiness. It replaces only the existing Vif
 production config with path routing to three dedicated overlays. Unknown paths

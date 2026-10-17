@@ -1,6 +1,7 @@
 """Exercise the shared edge's default HTTP and TLS virtual hosts."""
 
 import http.client
+import json
 import pathlib
 import re
 import socket
@@ -13,6 +14,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 COMMON = ROOT / "sites/00-common.conf.template"
+DEFAULT = ROOT / "sites/default.conf"
 
 
 def docker(*args):
@@ -22,6 +24,18 @@ def docker(*args):
 
 
 class UnknownHostIngressTest(unittest.TestCase):
+    def test_compose_masks_stock_default_vhost(self):
+        rendered = subprocess.run(
+            ["docker", "compose", "-f", str(ROOT / "compose.yml"),
+             "config", "--format", "json"],
+            check=True, capture_output=True, text=True, timeout=30,
+        )
+        service = json.loads(rendered.stdout)["services"]["nginx"]
+        self.assertIn(
+            {"source": "default_conf", "target": "/etc/nginx/conf.d/default.conf"},
+            service["configs"],
+        )
+
     def test_unknown_host_cannot_inherit_tenant_route(self):
         compose = (ROOT / "compose.yml").read_text()
         image = re.search(r"^\s+image:\s+(nginx:\S+)", compose, re.MULTILINE)
@@ -46,6 +60,7 @@ class UnknownHostIngressTest(unittest.TestCase):
             "run", "--detach", "--rm", "--memory", "128m", "--cpus", "0.5",
             "--publish", "127.0.0.1::80", "--publish", "127.0.0.1::443",
             "--volume", f"{COMMON}:/etc/nginx/conf.d/00-common.conf:ro",
+            "--volume", f"{DEFAULT}:/etc/nginx/conf.d/default.conf:ro",
             "--volume", f"{route}:/etc/nginx/conf.d/10-known.conf:ro",
             "--volume", f"{fixture_path}:/etc/nginx/test-certs:ro",
             image.group(1),
@@ -69,11 +84,11 @@ class UnknownHostIngressTest(unittest.TestCase):
                         raise
                     time.sleep(0.1)
 
-            # The image's ordinary localhost virtual host must still work.
+            # The image's stock localhost welcome page must not be public.
             connection = http.client.HTTPConnection("127.0.0.1", http_port, timeout=3)
             connection.request("GET", "/", headers={"Host": "localhost"})
             response = connection.getresponse()
-            self.assertEqual(response.status, 200)
+            self.assertEqual(response.status, 421)
             response.read()
             connection.close()
 

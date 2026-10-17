@@ -1,4 +1,8 @@
 configs:
+  # Shadow the stock image's public localhost welcome site. The explicit
+  # default servers in 00-common.conf.template own unmatched traffic instead.
+  default_conf:
+    file: ./sites/default.conf
   sentry_prod_conf:
     file: ./sites/sentry-prod.conf.template
   consent_lens_prod_conf:
@@ -86,6 +90,8 @@ services:
       MAILDEV_BRIO_STAGING_TLS_KEY_FILE: ${MAILDEV_BRIO_STAGING_TLS_KEY_FILE:-/etc/letsencrypt/live/localhost/privkey.pem}
       CATWLK_ACME_WEBROOT: ${CATWLK_ACME_WEBROOT:-/var/lib/letsencrypt}
     configs:
+      - source: default_conf
+        target: /etc/nginx/conf.d/default.conf
       - source: sentry_prod_conf
         target: /etc/nginx/templates/sentry-prod.conf.template
       - source: consent_lens_prod_conf

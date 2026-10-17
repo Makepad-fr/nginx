@@ -2,7 +2,10 @@
 
 import copy
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -52,6 +55,8 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(configs, original)
         self.assertEqual(networks, original_networks)
         self.assertEqual(candidate[preflight.COMMON_TARGET], preflight.COMMON_PREFIX + original[preflight.COMMON_TARGET])
+        self.assertIn(b'map "$ssl_server_name:$host:$http_host" $edge_sni_host_match',
+                      candidate[preflight.COMMON_TARGET])
         brio = '/etc/nginx/templates/02-brio-common.conf.template'
         self.assertEqual(candidate[brio], original[brio])
         self.assertEqual(sum(value.count(preflight.GUARD.encode()) for value in candidate.values()), 29)
@@ -123,9 +128,12 @@ class CandidateTests(unittest.TestCase):
             preflight.build_candidate(configs, networks)
 
     def test_only_four_live_certificate_mounts_are_replayed(self):
-        mounts = [{'Type': 'bind', 'Source': '/srv/certs/' + str(index), 'Target': target}
+        mounts = [{'Type': 'bind', 'Source': '/srv/certs/' + str(index),
+                   'Target': target, 'ReadOnly': True}
                   for index, target in enumerate(sorted(preflight.EXPECTED_MOUNT_TARGETS))]
-        container = {'Mounts': [{'Destination': target} for target in preflight.EXPECTED_MOUNT_TARGETS]}
+        container = {'Mounts': [{'Type': 'bind', 'Source': mount['Source'],
+                                 'Destination': mount['Target'], 'RW': False}
+                                for mount in mounts]}
         args = preflight.readonly_mount_args(mounts, container)
         self.assertEqual(args.count('--mount'), 4)
         self.assertTrue(all(value.endswith(',readonly') for value in args[1::2]))
@@ -137,6 +145,26 @@ class CandidateTests(unittest.TestCase):
         with self.assertRaises(preflight.PreflightError):
             preflight.readonly_mount_args(mounts, container)
 
+    def test_mount_mismatch_or_duplicate_fails_closed(self):
+        mounts = [{'Type': 'bind', 'Source': '/srv/certs/' + str(index),
+                   'Target': target, 'ReadOnly': True}
+                  for index, target in enumerate(sorted(preflight.EXPECTED_MOUNT_TARGETS))]
+        active = [{'Type': 'bind', 'Source': mount['Source'],
+                   'Destination': mount['Target'], 'RW': False} for mount in mounts]
+        for field, value in [('Source', '/wrong'), ('Type', 'volume'), ('RW', True)]:
+            changed = copy.deepcopy(active)
+            changed[0][field] = value
+            with self.subTest(field=field), self.assertRaises(preflight.PreflightError):
+                preflight.readonly_mount_args(mounts, {'Mounts': changed})
+        with self.assertRaises(preflight.PreflightError):
+            preflight.readonly_mount_args(mounts, {'Mounts': active + [active[0]]})
+        with self.assertRaises(preflight.PreflightError):
+            preflight.readonly_mount_args(mounts + [mounts[0]], {'Mounts': active})
+        changed = copy.deepcopy(mounts)
+        changed[0]['ReadOnly'] = False
+        with self.assertRaises(preflight.PreflightError):
+            preflight.readonly_mount_args(changed, {'Mounts': active})
+
     def test_candidate_cleanup_only_removes_its_labeled_container(self):
         with patch.object(preflight, 'docker', side_effect=[b'abc123 edge-host-guard-preflight-marker\n', b'']) as command:
             preflight.cleanup_candidate_container('edge-host-guard-preflight-marker', 'marker')
@@ -145,6 +173,105 @@ class CandidateTests(unittest.TestCase):
             with self.assertRaises(preflight.PreflightError):
                 preflight.cleanup_candidate_container('edge-host-guard-preflight-marker', 'marker')
         self.assertEqual(command.call_count, 1)
+
+    def test_tmpfs_mount_is_verified_not_inferred_from_directory(self):
+        valid = ('1 0 0:1 / / rw - ext4 /dev/root rw\n'
+                 '2 1 0:2 / /dev/shm rw,nosuid,nodev - tmpfs shm rw\n')
+        with (patch.object(preflight.Path, 'is_dir', return_value=True),
+              patch.object(preflight.Path, 'is_symlink', return_value=False),
+              patch.object(preflight.Path, 'read_text', return_value=valid)):
+            self.assertEqual(preflight.candidate_tmpfs_root(), Path('/dev/shm'))
+        for invalid in (valid.replace('tmpfs shm', 'ext4 disk'), valid + valid.splitlines()[1] + '\n',
+                        'not valid mountinfo'):
+            with (self.subTest(mountinfo=invalid),
+                  patch.object(preflight.Path, 'is_dir', return_value=True),
+                  patch.object(preflight.Path, 'is_symlink', return_value=False),
+                  patch.object(preflight.Path, 'read_text', return_value=invalid),
+                  self.assertRaises(preflight.PreflightError)):
+                preflight.candidate_tmpfs_root()
+
+    def test_invalid_utf8_is_redacted(self):
+        with self.assertRaises(preflight.PreflightError) as failure:
+            preflight.guard_tls_vhosts(b'server {\nlisten 443 ssl;\n# secret=\xff\n}\n')
+        self.assertIn('bytes withheld', str(failure.exception))
+        self.assertNotIn('secret', str(failure.exception))
+        self.assertNotIn('\\xff', str(failure.exception))
+        configs, networks = live_fixture()
+        configs[preflight.COMMON_TARGET] = b'\xff secret'
+        with self.assertRaises(preflight.PreflightError) as failure:
+            preflight.build_candidate(configs, networks)
+        self.assertNotIn('secret', str(failure.exception))
+
+    def test_mocked_docker_preflight_success_and_timeout_cleanup(self):
+        configs, networks = live_fixture()
+        candidate, _, _ = preflight.build_candidate(configs, networks)
+        mounts = [{'Type': 'bind', 'Source': '/srv/certs/' + str(index),
+                   'Target': target, 'ReadOnly': True}
+                  for index, target in enumerate(sorted(preflight.EXPECTED_MOUNT_TARGETS))]
+        container = {
+            'Config': {'Env': ['SAFE=fixture']},
+            'Mounts': [{'Type': 'bind', 'Source': mount['Source'],
+                        'Destination': mount['Target'], 'RW': False} for mount in mounts],
+        }
+        calls = []
+        run_name = None
+
+        def fake_success(*args, **kwargs):
+            calls.append((args, kwargs))
+            if args[0] == 'run':
+                conf_mount = next(args[index + 1] for index, value in enumerate(args)
+                                  if value == '--mount' and 'dst=/etc/nginx/conf.d' in args[index + 1])
+                conf = Path(conf_mount.split('src=', 1)[1].split(',dst=', 1)[0])
+                for target, raw in candidate.items():
+                    (conf / Path(target).name.removesuffix('.template')).write_bytes(raw)
+                return b''
+            if args[0] == 'ps':
+                return b''  # --rm removed the candidate.
+            raise AssertionError(args)
+
+        with tempfile.TemporaryFile() as env_file:
+            with (patch.object(preflight, 'candidate_tmpfs_root', return_value=Path(tempfile.gettempdir())),
+                  patch.object(preflight.os, 'memfd_create', create=True,
+                               side_effect=lambda *args, **kwargs: os.dup(env_file.fileno())),
+                  patch.object(preflight, 'docker', side_effect=fake_success)):
+                rendered = preflight.syntax_preflight(candidate, 'active-fixture', container,
+                                                      'nginx:fixture', mounts)
+        self.assertEqual(rendered, 30)
+        run = next(args for args, _ in calls if args[0] == 'run')
+        self.assertIn('--pull=never', run)
+        self.assertIn('container:active-fixture', run)
+        self.assertNotIn('--volumes-from', run)
+        self.assertFalse(any(args[0] in ('service', 'config') for args, _ in calls))
+
+        def fake_timeout(*args, **kwargs):
+            nonlocal run_name
+            calls.append((args, kwargs))
+            if args[0] == 'run':
+                run_name = args[args.index('--name') + 1]
+                raise preflight.PreflightError('Local Docker read/preflight failed; diagnostics withheld')
+            if args[0] == 'ps':
+                return f'abc123 {run_name}\n'.encode()
+            if args[0] == 'rm':
+                return b''
+            raise AssertionError(args)
+
+        calls.clear()
+        with tempfile.TemporaryFile() as env_file:
+            with (patch.object(preflight, 'candidate_tmpfs_root', return_value=Path(tempfile.gettempdir())),
+                  patch.object(preflight.os, 'memfd_create', create=True,
+                               side_effect=lambda *args, **kwargs: os.dup(env_file.fileno())),
+                  patch.object(preflight, 'docker', side_effect=fake_timeout),
+                  self.assertRaises(preflight.PreflightError)):
+                preflight.syntax_preflight(candidate, 'active-fixture', container,
+                                          'nginx:fixture', mounts)
+        self.assertEqual(next(args for args, _ in calls if args[0] == 'rm')[1:], ('--force', 'abc123'))
+
+    def test_docker_timeout_is_redacted(self):
+        with (patch.object(preflight.subprocess, 'run',
+                           side_effect=subprocess.TimeoutExpired('docker', 1, output=b'secret')),
+              self.assertRaises(preflight.PreflightError) as failure):
+            preflight.docker('run', timeout=1)
+        self.assertNotIn('secret', str(failure.exception))
 
 
 if __name__ == '__main__':

@@ -52,9 +52,9 @@ server {
     return 421;
 }
 
-map "$ssl_server_name:$host" $edge_sni_host_match {
+map "$ssl_server_name:$host:$http_host" $edge_sni_host_match {
     default 0;
-    ~*^([^:]+):\\1$ 1;
+    ~*^([^:]+):\\1:\\1(?::443)?$ 1;
 }
 
 '''
@@ -74,6 +74,13 @@ def sha(value):
 
 def canonical_sha(value):
     return sha(json.dumps(value, sort_keys=True, separators=(',', ':')).encode())
+
+
+def decode_config(raw):
+    try:
+        return raw.decode('utf-8')
+    except UnicodeDecodeError:
+        raise PreflightError('Non-UTF-8 configuration; bytes withheld') from None
 
 
 def server_blocks(source):
@@ -135,10 +142,7 @@ def server_blocks(source):
 
 
 def guard_tls_vhosts(raw):
-    try:
-        source = raw.decode('utf-8')
-    except UnicodeDecodeError as exc:
-        raise PreflightError('Docker Config is not UTF-8') from exc
+    source = decode_config(raw)
     edits = []
     for opening, closing in server_blocks(source):
         body = source[opening + 1:closing]
@@ -193,7 +197,7 @@ def build_candidate(configs, networks):
         raise PreflightError('A live config already owns default.conf')
     common = configs[COMMON_TARGET]
     if (b'$edge_sni_host_match' in common or b'default_server' in common
-            or server_blocks(common.decode('utf-8'))):
+            or server_blocks(decode_config(common))):
         raise PreflightError('Live common config needs manual review')
     candidate = dict(configs)
     candidate[COMMON_TARGET] = COMMON_PREFIX + common
@@ -273,21 +277,37 @@ def write_private(path, data):
 
 
 def readonly_mount_args(mounts, container):
-    if {mount.get('Target') for mount in mounts} != EXPECTED_MOUNT_TARGETS:
+    spec_by_target = {}
+    for mount in mounts:
+        target = mount.get('Target')
+        if target in spec_by_target:
+            raise PreflightError('Duplicate live certificate/ACME service mount')
+        spec_by_target[target] = mount
+    if set(spec_by_target) != EXPECTED_MOUNT_TARGETS:
         raise PreflightError('Live certificate/ACME mount inventory changed')
-    active_targets = {mount.get('Destination') for mount in container.get('Mounts', [])}
-    if not EXPECTED_MOUNT_TARGETS.issubset(active_targets):
+    active_by_target = {}
+    for mount in container.get('Mounts', []):
+        target = mount.get('Destination')
+        if target in EXPECTED_MOUNT_TARGETS:
+            if target in active_by_target:
+                raise PreflightError('Duplicate active certificate/ACME mount')
+            active_by_target[target] = mount
+    if set(active_by_target) != EXPECTED_MOUNT_TARGETS:
         raise PreflightError('Active container lacks a reviewed certificate/ACME mount')
     args = []
-    for mount in mounts:
+    for target in sorted(EXPECTED_MOUNT_TARGETS):
+        mount = spec_by_target[target]
+        active = active_by_target[target]
         source = mount.get('Source', '')
-        if (mount.get('Type') != 'bind' or not Path(source).is_absolute()
+        if (mount.get('Type') != 'bind' or mount.get('ReadOnly') is not True
+                or active.get('Type') != 'bind' or active.get('RW') is not False
+                or active.get('Source') != source or not Path(source).is_absolute()
                 or any(char in source for char in ',\n\r')):
-            raise PreflightError('Cannot replay an unreviewed edge mount')
+            raise PreflightError('Certificate/ACME mount differs from reviewed read-only service Spec')
         # Do not inherit Docker Config file mounts from the active container:
         # they would override the temporary candidate templates. nginx -t
         # only needs the four existing certificate/ACME binds, all read-only.
-        args.extend(['--mount', f'type=bind,src={source},dst={mount["Target"]},readonly'])
+        args.extend(['--mount', f'type=bind,src={source},dst={target},readonly'])
     return args
 
 
@@ -301,10 +321,33 @@ def cleanup_candidate_container(name, marker):
     docker('rm', '--force', rows[0].split()[0], timeout=15)
 
 
-def syntax_preflight(candidate, active_id, container, image, mounts):
-    if not Path('/dev/shm').is_dir():
+def candidate_tmpfs_root():
+    path = Path('/dev/shm')
+    if not path.is_dir() or path.is_symlink():
         raise PreflightError('Candidate tmpfs /dev/shm is unavailable')
-    with tempfile.TemporaryDirectory(prefix='edge-host-guard-preflight-', dir='/dev/shm') as temporary:
+    try:
+        mountinfo = Path('/proc/self/mountinfo').read_text()
+    except OSError:
+        raise PreflightError('Cannot verify candidate tmpfs filesystem') from None
+    matches = []
+    for line in mountinfo.splitlines():
+        if ' - ' not in line:
+            raise PreflightError('Cannot parse candidate mount information')
+        before, after = line.split(' - ', 1)
+        fields = before.split()
+        filesystem = after.split()
+        if len(fields) < 5 or not filesystem:
+            raise PreflightError('Cannot parse candidate mount information')
+        if fields[4] == '/dev/shm':
+            matches.append(filesystem[0])
+    if matches != ['tmpfs']:
+        raise PreflightError('Candidate /dev/shm is not a unique tmpfs mount')
+    return path
+
+
+def syntax_preflight(candidate, active_id, container, image, mounts):
+    with tempfile.TemporaryDirectory(prefix='edge-host-guard-preflight-',
+                                     dir=candidate_tmpfs_root()) as temporary:
         root = Path(temporary)
         templates = root / 'templates'
         conf = root / 'conf.d'
@@ -344,14 +387,14 @@ def syntax_preflight(candidate, active_id, container, image, mounts):
             os.close(env_fd)
         if {path.name for path in conf.iterdir()} != outputs:
             raise PreflightError('Not every live candidate config was rendered')
-        common_rendered = (conf / '00-common.conf').read_text()
-        if ('map "$ssl_server_name:$host" $edge_sni_host_match {' not in common_rendered
+        common_rendered = decode_config((conf / '00-common.conf').read_bytes())
+        if ('map "$ssl_server_name:$host:$http_host" $edge_sni_host_match {' not in common_rendered
                 or common_rendered.count('ssl_reject_handshake on;') != 1):
             raise PreflightError('Rendered common host guard differs from reviewed plan')
         rendered_tls = 0
         default_rejects = 0
         for path in conf.iterdir():
-            rendered = path.read_text()
+            rendered = decode_config(path.read_bytes())
             for opening, closing in server_blocks(rendered):
                 body = rendered[opening + 1:closing]
                 if not TLS_LISTEN.search(body):
@@ -415,5 +458,7 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (PreflightError, KeyError, ValueError, UnicodeDecodeError) as exc:
+    except UnicodeDecodeError:
+        raise SystemExit('Preflight refused: non-UTF-8 inspected data; bytes withheld') from None
+    except (PreflightError, KeyError, ValueError) as exc:
         raise SystemExit(f'Preflight refused: {exc}') from None

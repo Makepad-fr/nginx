@@ -1,3 +1,22 @@
+# An unknown Host must not inherit the first tenant's redirect or content.
+# Reject unknown TLS names before sending any tenant certificate; a request
+# with a known SNI but an unrelated Host is rejected at HTTP routing instead.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    access_log off;
+    return 421;
+}
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;
+    access_log off;
+    return 421;
+}
+
 map $http_upgrade $connection_upgrade {
     default upgrade;
     '' close;

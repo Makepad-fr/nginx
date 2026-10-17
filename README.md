@@ -33,6 +33,11 @@ The script validates a complete candidate copied from the live proxy and preserv
 - `sites/maildev-brio-staging.conf.template`: maintainer-only MailDev ingress.
 - `sites/00-common.conf.template`: common limits and privacy-safe log formats.
 
+The common configuration rejects unknown HTTP Host values with 421 and rejects
+unknown TLS names during the handshake. This prevents the first tenant virtual
+host from answering requests addressed to another name. The focused Docker
+regression is `python3 -m unittest ./tests/test_unknown_host_ingress.py`.
+
 ## Brio staging ingress
 
 The shared proxy joins two encrypted overlays for Brio. It validates them but

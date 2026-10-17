@@ -83,6 +83,7 @@ jobs:
           python3 -m unittest ./tests/test_vif_ingress_control.py
           python3 -m unittest ./tests/test_preserve_vif_landing.py
           python3 -m unittest ./tests/test_visitaki_ingress.py
+          python3 -m unittest ./tests/test_unknown_host_ingress.py
           ./scripts/test-visitaki-ingress.sh
           python3 ./scripts/test-vif-response-headers.py
           ./scripts/test-vif-staging-ingress.sh

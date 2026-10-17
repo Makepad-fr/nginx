@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Exercise scoped upload sizes and storage routing against real Nginx."""
-import pathlib,subprocess,tempfile,time,os,json,urllib.request,urllib.error,ssl
+import pathlib,subprocess,tempfile,time,os,json,http.client,socket,ssl
 root=pathlib.Path(__file__).resolve().parent.parent
 image='nginx:1.30-alpine3.24@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46'
 name=f'brio-photo-ingress-test-{os.getpid()}-{time.time_ns()}'
@@ -11,10 +11,10 @@ def run(*args):
   raise
 with tempfile.TemporaryDirectory(prefix='brio-photo-ingress-') as raw:
  d=pathlib.Path(raw);conf=d/'conf';conf.mkdir();cert=d/'cert';cert.mkdir()
- run('openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=127.0.0.1','-addext','subjectAltName=IP:127.0.0.1','-keyout',str(cert/'key.pem'),'-out',str(cert/'cert.pem'))
+ run('openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=brio-staging.localhost','-addext','subjectAltName=DNS:brio-staging.localhost','-keyout',str(cert/'key.pem'),'-out',str(cert/'cert.pem'))
  source=(root/'sites/brio-staging.conf.template').read_text()
  assert source.count('proxy_pass http://10.80.0.2:9000;')==1
- replacements={'BRIO_STAGING_SERVER_NAME':'127.0.0.1','BRIO_STAGING_UPSTREAM':'http://127.0.0.1:8081','BRIO_STAGING_TLS_CERT_FILE':'/cert/cert.pem','BRIO_STAGING_TLS_KEY_FILE':'/cert/key.pem','CATWLK_ACME_WEBROOT':'/tmp'}
+ replacements={'BRIO_STAGING_SERVER_NAME':'brio-staging.localhost','BRIO_STAGING_UPSTREAM':'http://127.0.0.1:8081','BRIO_STAGING_TLS_CERT_FILE':'/cert/cert.pem','BRIO_STAGING_TLS_KEY_FILE':'/cert/key.pem','CATWLK_ACME_WEBROOT':'/tmp'}
  for k,v in replacements.items():source=source.replace('${'+k+'}',v)
  source=source.replace('proxy_pass http://10.80.0.2:9000;','proxy_pass http://127.0.0.1:8082;')
  (conf/'brio.conf').write_text(source)
@@ -27,15 +27,21 @@ server { listen 8082; client_max_body_size 20m; add_header X-Fixture-Host $host 
   run('docker','exec',name,'nginx','-t')
   port=run('docker','port',name,'443/tcp').strip().split(':')[-1]
   context=ssl.create_default_context(cafile=str(cert/'cert.pem'))
+  class TenantConnection(http.client.HTTPSConnection):
+   def connect(self):
+    peer=socket.create_connection(('127.0.0.1',self.port),self.timeout)
+    self.sock=self._context.wrap_socket(peer,server_hostname=self.host)
   def request(path,method='GET',data=None,headers=None):
-   r=urllib.request.Request(f'https://127.0.0.1:{port}'+path,data=data,method=method,headers=headers or {})
-   try: res=urllib.request.urlopen(r,context=context,timeout=15)
-   except urllib.error.HTTPError as e: res=e
-   with res: return res.status,res.headers,res.read()
+   conn=TenantConnection('brio-staging.localhost',int(port),context=context,timeout=15)
+   try:
+    conn.request(method,path,body=data,headers=headers or {})
+    res=conn.getresponse()
+    return res.status,res.headers,res.read()
+   finally: conn.close()
   for _ in range(50):
    try:
     if request('/readyz')[0]==204:break
-   except (OSError,urllib.error.URLError):pass
+   except (OSError,ssl.SSLError):pass
    time.sleep(.1)
   medium=b'x'*(2<<20)
   for path in ['/admin/events','/admin/events/11111111-1111-4111-8111-111111111111','/admin/photo-library']:
@@ -49,7 +55,7 @@ server { listen 8082; client_max_body_size 20m; add_header X-Fixture-Host $host 
   assert request(key)[0]==403,'unsigned object request bypassed storage authentication'
   status,headers,body=request(key,headers={'Authorization':'fixture-signature','Cookie':'must-not-reach-storage=1'})
   assert status==200 and body==b'private fixture'
-  assert headers.get('X-Fixture-Host')=='127.0.0.1' and not headers.get('X-Fixture-Cookie'),'signature host or cookie isolation broken'
+  assert headers.get('X-Fixture-Host')=='brio-staging.localhost' and not headers.get('X-Fixture-Cookie'),'signature host or cookie isolation broken'
   assert request(key,'PUT',medium,{'Authorization':'fixture-signature'})[0]==200
   assert request(key,'DELETE',headers={'Authorization':'fixture-signature'})[0]==200
   assert request(key,'POST',headers={'Authorization':'fixture-signature'})[0]==403

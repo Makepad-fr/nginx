@@ -246,7 +246,7 @@ proxy_port=$(docker port "${proxy}" 443/tcp | awk -F: 'NR == 1 {print $NF}')
 
 request() {
   local host=$1 path=$2 cookie=${3:-}
-  local args=(-ksS --http1.1 --resolve "${host}:${proxy_port}:127.0.0.1" -D - -o /dev/null)
+  local args=(-ksS --http1.1 --resolve "${host}:${proxy_port}:127.0.0.1" -H "Host: ${host}" -D - -o /dev/null)
   [[ -z "${cookie}" ]] || args+=(-H "Cookie: ${cookie}")
   curl "${args[@]}" "https://${host}:${proxy_port}${path}"
 }
@@ -272,6 +272,7 @@ for protected_path in / /api/email '/socket.io/?EIO=4&transport=polling'; do
 done
 for relay_path in /email/example/relay /api/email/example/relay; do
   status=$(curl -ksS --http1.1 --resolve "maildev-brio-staging.localhost:${proxy_port}:127.0.0.1" \
+    -H 'Host: maildev-brio-staging.localhost' \
     -o /dev/null -w '%{http_code}' "https://maildev-brio-staging.localhost:${proxy_port}${relay_path}")
   [[ "${status}" == 403 ]]
 done

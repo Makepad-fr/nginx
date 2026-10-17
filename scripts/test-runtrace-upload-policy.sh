@@ -89,6 +89,7 @@ fi
 wait_for_proxy() {
   local attempts=0
   until curl -ksS --resolve "runtrace.localhost:${proxy_port}:127.0.0.1" \
+    -H "Host: ${RUNTRACE_PROD_SERVER_NAME}" \
     -o /dev/null "https://runtrace.localhost:${proxy_port}/healthz"; do
     attempts=$((attempts + 1))
     if (( attempts >= 30 )); then
@@ -104,6 +105,7 @@ post_bytes() {
   local mebibytes=$2
   dd if=/dev/zero bs=1048576 count="${mebibytes}" 2>/dev/null \
     | curl -ksS --http1.1 --resolve "runtrace.localhost:${proxy_port}:127.0.0.1" \
+      -H "Host: ${RUNTRACE_PROD_SERVER_NAME}" \
       -H 'Content-Type: application/octet-stream' \
       -H 'Expect:' \
       --data-binary @- \
@@ -125,6 +127,7 @@ assert_status() {
 wait_for_proxy
 headers_file="${work_dir}/response-headers"
 curl -ksS --resolve "runtrace.localhost:${proxy_port}:127.0.0.1" \
+  -H "Host: ${RUNTRACE_PROD_SERVER_NAME}" \
   -D "${headers_file}" \
   -o /dev/null \
   "https://runtrace.localhost:${proxy_port}/healthz?organizationSlug=must-not-be-logged"

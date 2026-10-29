@@ -36,7 +36,7 @@ configs:
 
 services:
   nginx:
-    image: nginx:1.31-alpine3.24@sha256:060849a174666c53439dc7cecbf8f67e225c7cbfb1a44ca97915d9a172a81e6d
+    image: nginx:1.31-alpine3.24@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606
     healthcheck:
       test: ["CMD", "nginx", "-t"]
       interval: 15s

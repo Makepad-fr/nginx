@@ -7,7 +7,7 @@ The candidate updates only the official Nginx image digest. Deploy it with
 - Candidate: `nginx:1.31-alpine3.24@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606`.
 - Source PR: #97 at `6f440e20024c2b1c101b5255e4729dfc4ffe893f`.
 - Independent repository tests: 79 passed.
-- Mendloo review: https://github.com/Makepad-fr/nginx/pull/97#pullrequestreview-5722367740
+- Mendloo review: https://github.com/Makepad-fr/nginx/pull/97#pullrequestreview-5722373171
 
 The live-host `--check` preflight passed with the candidate image against all
 rendered routes, certificates, existing mounts and upstreams. A baseline recorded

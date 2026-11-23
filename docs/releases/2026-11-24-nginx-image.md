@@ -30,5 +30,22 @@ identities/images/start times, and all 33 endpoint responses. Retain its sanitiz
 receipt and deployment image identity.
 
 Swarm owns automatic health-failure rollback. The predecessor above remains the
-rollback target; inspect any failed rollout before further mutation. This record
-contains preflight evidence only; deployment has not yet been performed.
+rollback target; inspect any failed rollout before further mutation. The deployment below completed without invoking rollback.
+
+## Verified deployment
+
+PR #100 merged through native stack #102 as
+`470e10b47061f0be6a85d24646a213e45d393084`. Both exact-main checks passed:
+[CI 45288283748](https://github.com/Makepad-fr/nginx/actions/runs/45288283748)
+and [proxy CI 45288283671](https://github.com/Makepad-fr/nginx/actions/runs/45288283671).
+
+The image-only helper then converged `makepad-edge_nginx` at service version
+`105715`, with the candidate image healthy and `nginx -t` passing. The receipt
+recorded predecessor-spec SHA-256
+`4f11d2b10c196045fc1d78e67fc2131109a87c65a8a7b3eba7a3a3221e582b14`.
+Independent before/after inspection confirmed the complete service specification
+apart from the requested image was unchanged (normalized SHA-256
+`ce97e538e2e8ba005291e174cd80a2be387bdbffcf8b045e258d36ef5e1a4aad`).
+All 115 neighboring container identities, images, start times and restart counts
+remained unchanged. All 33 HTTPS status codes and redirect destinations matched
+the fresh baseline, including Visitaki health, protected readiness and identity.

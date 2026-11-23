@@ -25,6 +25,9 @@ server {
     access_log off;
     error_log /dev/stderr crit;
     client_max_body_size 5m;
+    # The API accepts AppTransaction proofs up to 16 KiB in a single header.
+    # Keep the buffer count; allow room for that header only on this TLS host.
+    large_client_header_buffers 4 32k;
     add_header Strict-Transport-Security "max-age=31536000" always;
     resolver 127.0.0.11 ipv6=off valid=30s;
     location / {

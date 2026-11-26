@@ -1,6 +1,7 @@
 """Add only Visitaki routes to the existing proxy through a remote Docker context."""
 import argparse
 import base64
+import copy
 import hashlib
 import json
 import os
@@ -9,6 +10,8 @@ import re
 import subprocess
 import tempfile
 import time
+
+from docker_context_api import update_service
 
 SERVICE = 'makepad-edge_nginx'
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,6 +105,82 @@ def changes_for(before, routes, networks):
     return changes, removed, added
 
 
+def candidate_spec(before, routes, networks):
+    """Change only the selected config references and missing network attachments."""
+    result = copy.deepcopy(before['Spec'])
+    spec = result['TaskTemplate']['ContainerSpec']
+    configs = spec.setdefault('Configs', [])
+    for route, content in routes.items():
+        target = '/etc/nginx/templates/' + route + '.conf.template'
+        name = 'visitaki_' + route + '_' + hashlib.sha256(content.encode()).hexdigest()[:16]
+        matches = [c for c in configs if c['File']['Name'] == target]
+        assert len(matches) <= 1
+        if matches and matches[0]['ConfigName'] == name:
+            continue
+        values = json.loads(run('docker', 'config', 'inspect', name))
+        assert len(values) == 1 and values[0]['Spec']['Name'] == name
+        value = values[0]
+        assert base64.b64decode(value['Spec']['Data'], validate=True) == content.encode()
+        replacement = {'ConfigID': value['ID'], 'ConfigName': name,
+                       'File': {'Name': target, 'UID': '0', 'GID': '0', 'Mode': 0o444}}
+        if matches:
+            assert owned_config(matches[0], route), 'Unowned config at Visitaki target'
+            configs[configs.index(matches[0])] = replacement
+        else:
+            configs.append(replacement)
+    attached = result['TaskTemplate'].get('Networks', [])
+    for network in networks:
+        value = json.loads(run('docker', 'network', 'inspect', network))[0]
+        assert value['Driver'] == 'overlay' and value['Attachable']
+        if not any(n['Target'] == value['Id'] for n in attached):
+            attached.append({'Target': value['Id']})
+            result['TaskTemplate']['Networks'] = attached
+    return result
+
+
+def wait_service(service_id, expected, deadline, restored=False):
+    while time.monotonic() < deadline:
+        current = inspect()
+        if current['ID'] != service_id or current['Spec'] != expected:
+            raise RuntimeError('Shared service changed; refusing to overwrite concurrent work')
+        status = current.get('UpdateStatus')
+        if status is not None and not isinstance(status, dict):
+            raise RuntimeError('Invalid service update status')
+        # Swarm resets UpdateStatus when committing the spec; the updater sets it
+        # asynchronously. Missing status is pending only under the exact spec guard.
+        state = status.get('State') if status is not None else None
+        if state == 'completed' or (restored and state == 'rollback_completed'):
+            return current
+        if state not in (None, 'updating') and not (restored and state == 'rollback_started'):
+            raise RuntimeError('Service update did not converge; inspect retained state')
+        time.sleep(2)
+    raise RuntimeError('Service convergence timed out')
+
+
+def restore_owned(before, candidate, acknowledged):
+    if acknowledged is not True:
+        raise RuntimeError('Unacknowledged update cannot authorize rollback')
+    current = inspect()
+    if current['ID'] != before['ID']:
+        raise RuntimeError('Service identity changed; rollback refused')
+    deadline = time.monotonic() + 300
+    if current['Spec'] != before['Spec']:
+        if current['Spec'] != candidate or current.get('PreviousSpec') != before['Spec']:
+            raise RuntimeError('Service update ownership lost; rollback refused')
+        # Restore the saved full spec with the just-verified version. Do not ask
+        # Docker CLI to inspect again or use the mutable "previous" rollback slot.
+        update_service(current, before['Spec'])
+    return wait_service(before['ID'], before['Spec'], deadline, restored=True)
+
+
+def write_receipt(path, value):
+    # Full service specs can contain private runtime fields. Never overwrite
+    # earlier evidence or rely on the runner's umask for confidentiality.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'w') as stream:
+        json.dump(value, stream, indent=2)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('phase', choices=['bootstrap', 'identity', 'app'])
@@ -152,10 +231,15 @@ def main():
                 import base64
                 current = json.loads(exists.stdout)[0]
                 assert base64.b64decode(current['Spec']['Data']).decode() == content
-        receipt.with_suffix('.before.json').write_text(json.dumps(before, indent=2))
+        expected = candidate_spec(before, routes, networks)
+        write_receipt(receipt.with_suffix('.before.json'), before)
+        write_receipt(receipt.with_suffix('.candidate.json'), expected)
+        acknowledged = False
         try:
-            run('docker', 'service', 'update', '--detach=false', *changes, SERVICE)
-            after = inspect()
+            deadline = time.monotonic() + 300
+            update_service(before, expected)
+            acknowledged = True
+            after = wait_service(before['ID'], expected, deadline)
             updated = after['Spec']['TaskTemplate']['ContainerSpec']
             for key in set(spec) | set(updated):
                 if key != 'Configs':
@@ -178,16 +262,22 @@ def main():
             else:
                 raise RuntimeError('Visitaki external route smoke failed')
             assert {host: status(host) for host in neighbors} == neighbors, 'Neighbor route status changed'
-            receipt.write_text(json.dumps({'phase': args.phase, 'revision': os.environ['GITHUB_SHA'],
+            write_receipt(receipt, {'phase': args.phase, 'revision': os.environ['GITHUB_SHA'],
                 'service_version': after['Version']['Index'], 'existing_configuration_preserved': True,
                 'configs': [name for name, _ in added], 'neighbor_status': neighbors,
-                'external_route_smoke': True, 'passed': True}, indent=2))
+                'external_route_smoke': True, 'passed': True})
             print(receipt.read_text())
-        except BaseException:
-            if inspect()['Version']['Index'] != before['Version']['Index']:
-                run('docker', 'service', 'rollback', '--detach=false', SERVICE)
-                restored = inspect()['Spec']
-                assert restored['TaskTemplate']['ContainerSpec'] == spec
+        except BaseException as primary:
+            if acknowledged:
+                try:
+                    restore_owned(before, expected, acknowledged)
+                except BaseException as recovery:
+                    write_receipt(receipt.with_suffix('.recovery.json'), {
+                        'primary_error_type': type(primary).__name__,
+                        'recovery_error_type': type(recovery).__name__,
+                        'automatic_recovery_verified': False,
+                    })
+                    raise RuntimeError('Ingress failed and recovery is unverified; inspect retained receipts') from primary
             raise
     finally:
         if candidate:

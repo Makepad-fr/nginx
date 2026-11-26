@@ -293,6 +293,17 @@ service specification for rollback. Test HTTPS externally and verify neighboring
 routes before declaring delivery. The application overlay network is
 `makepad_visitaki_preview_app`.
 
+The Visitaki helper sends a single Engine API update with the originally reviewed
+service version, through the workflow's existing Docker SSH context. It uses the
+Docker CLI's internal `system dial-stdio` transport; an unsupported transport or
+an uncertain response fails without retrying. After an acknowledged update,
+automatic recovery requires the exact candidate and predecessor specifications
+and restores the saved full specification with another version-bound request.
+An unrelated update or an ambiguous dispatch requires operator reconciliation;
+the helper never invokes a blind `docker service rollback`. Full service snapshots
+and recovery receipts are created exclusively with mode `0600`; existing evidence
+is never overwritten.
+
 Sanitized receipts are written to the deployment log and workflow summary;
 artifact uploads are supplementary because the organization can exhaust its
 artifact storage quota. Copy the successful receipt into the release record and

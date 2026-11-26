@@ -26,6 +26,7 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           bash scripts/test-visitaki-ingress.sh
+          python3 -m unittest discover -s tests -p test_docker_context_api.py
           python3 -m unittest discover -s tests -p test_visitaki_ingress.py
       - name: Prepare isolated SSH transport and registry configuration
         env:

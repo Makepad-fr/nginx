@@ -1,9 +1,11 @@
 """Add only Visitaki routes to the existing proxy through a remote Docker context."""
 import argparse
+import base64
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import time
@@ -14,6 +16,9 @@ TARGETS = {
     'identity': ('visitaki-identity', 'makepad_keycloak_visitaki_proxy'),
     'app': ('visitaki-preview', 'makepad_visitaki_preview_app'),
 }
+# The reviewed host-guard rollout predates this helper's config-name prefix.
+# Permit migration only from its exact app-route bytes, never another route.
+LEGACY_APP_CONFIG_SHA256 = '025120c125755976cf6956db45f581e9271ac84f43762df4e99746403786c818'
 
 
 def run(*args, data=None):
@@ -52,6 +57,24 @@ def bootstrap(hosts):
             'location / { return 503; } }\n')
 
 
+def owned_config(config, route):
+    if config['ConfigName'].startswith('visitaki_'):
+        return True
+    match = re.fullmatch(r'visitaki-host-guard-[a-f0-9]{8}-([a-f0-9]{16})', config['ConfigName'])
+    if route != 'visitaki-preview' or not match:
+        return False
+    if config['File']['Name'] != '/etc/nginx/templates/visitaki-preview.conf.template':
+        return False
+    inspected = json.loads(run('docker', 'config', 'inspect', config['ConfigID']))
+    if len(inspected) != 1:
+        return False
+    current = inspected[0]
+    if current['ID'] != config['ConfigID'] or current['Spec']['Name'] != config['ConfigName']:
+        return False
+    digest = hashlib.sha256(base64.b64decode(current['Spec']['Data'], validate=True)).hexdigest()
+    return digest == LEGACY_APP_CONFIG_SHA256 and match[1] == digest[:16]
+
+
 def changes_for(before, routes, networks):
     configs = before['Spec']['TaskTemplate']['ContainerSpec'].get('Configs', [])
     changes = []
@@ -65,7 +88,7 @@ def changes_for(before, routes, networks):
         if previous and previous[0]['ConfigName'] == name:
             continue
         if previous:
-            assert previous[0]['ConfigName'].startswith('visitaki_'), 'Unowned config at Visitaki target'
+            assert owned_config(previous[0], route), 'Unowned config at Visitaki target'
             changes.extend(['--config-rm', previous[0]['ConfigName']])
             removed.append(previous[0]['ConfigID'])
         changes.extend(['--config-add', f'source={name},target={target},mode=0444'])
